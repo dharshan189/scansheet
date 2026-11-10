@@ -1205,5 +1205,44 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
+  // --------------------------------------------------------------------------
+  // 5. FLOATING MOBILE APK DOWNLOAD BOX (Bottom-Right Corner)
+  // --------------------------------------------------------------------------
+  const apkBanner = Utils.qs('#mobile-app-download-banner');
+  const btnDismissApk = Utils.qs('#btn-dismiss-apk-banner');
+  const btnDownloadApk = Utils.qs('#btn-download-apk');
+
+  if (apkBanner) {
+    const isNativeCapacitor = Boolean(
+      window.Capacitor?.isNativePlatform?.() ||
+      window.location.protocol === 'capacitor:' ||
+      /; wv\)/i.test(navigator.userAgent || '')
+    );
+    let wasDismissed = false;
+    try {
+      wasDismissed = sessionStorage.getItem('scansheet_hide_apk_banner') === '1';
+    } catch (_) {}
+
+    if (isNativeCapacitor || wasDismissed) {
+      apkBanner.style.display = 'none';
+    }
+
+    if (btnDismissApk) {
+      btnDismissApk.addEventListener('click', () => {
+        apkBanner.style.display = 'none';
+        try {
+          sessionStorage.setItem('scansheet_hide_apk_banner', '1');
+        } catch (_) {}
+      });
+    }
+
+    if (btnDownloadApk) {
+      btnDownloadApk.addEventListener('click', () => {
+        UI.showNotification('Downloading ScanSheet.apk for Android...');
+        Utils.announce('Downloading ScanSheet Android application.');
+      });
+    }
+  }
+
   console.log('ScanSheet initialized (Step 2: Upload Action & Login Gate Ready).');
 });

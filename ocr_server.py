@@ -7,11 +7,14 @@ via lightweight Flask REST API and serves the frontend application.
 import os
 import sys
 import base64
+import mimetypes
 import cv2
 import numpy as np
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from ocr_pipeline import process_document_image
+
+mimetypes.add_type('application/vnd.android.package-archive', '.apk')
 
 # Path to static frontend files
 FRONTEND_DIR = os.path.abspath(os.path.dirname(__file__))
