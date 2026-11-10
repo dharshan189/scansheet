@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none">
+  <defs>
+    <!-- Crisp Split: Half-Black (Top) & Half-Dark-Yellow (Bottom) -->
+    <linearGradient id="split-black-yellow" x1="0" y1="16" x2="0" y2="50" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0B0F19"/>
+      <stop offset="47%" stop-color="#0B0F19"/>
+      <stop offset="47.1%" stop-color="#111827"/>
+      <stop offset="52.9%" stop-color="#D97706"/>
+      <stop offset="53%" stop-color="#D97706"/>
+      <stop offset="100%" stop-color="#B45309"/>
+    </linearGradient>
+
+    <!-- Center Yellow Matrix Bar -->
+    <linearGradient id="dark-yellow-bar" x1="22" y1="30" x2="42" y2="34" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="50%" stop-color="#D97706"/>
+      <stop offset="100%" stop-color="#B45309"/>
+    </linearGradient>
+
+    <!-- Scan Line Gradient in Dark Yellow Glow -->
+    <linearGradient id="yellow-scan-laser" x1="6" y1="32" x2="58" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#D97706" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#F59E0B" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#D97706" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Soft Depth Shadow -->
+    <filter id="logo-depth-shadow" x="10" y="11" width="44" height="46" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <!-- Viewfinder Frame Brackets (With Generous Spacing / No Touching) -->
+  <!-- Top-Left Bracket (Black) -->
+  <path d="M 8 17 V 11 C 8 9.34 9.34 8 11 8 H 17" stroke="#0B0F19" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Top-Right Bracket (Black) -->
+  <path d="M 56 17 V 11 C 56 9.34 54.66 8 53 8 H 47" stroke="#0B0F19" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Bottom-Left Bracket (Dark Yellow) -->
+  <path d="M 8 47 V 53 C 8 54.66 9.34 56 11 56 H 17" stroke="#D97706" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Bottom-Right Bracket (Dark Yellow) -->
+  <path d="M 56 47 V 53 C 56 54.66 54.66 56 53 56 H 47" stroke="#D97706" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- Main "S" Monogram Group with Clean Geometry (No Dots) -->
+  <g filter="url(#logo-depth-shadow)">
+    <!-- "S" Monogram Body: Half Black & Half Dark Yellow -->
+    <path d="M 45 16 C 46.1 16 47 16.9 47 18 C 47 19.1 46.1 20 45 20 H 26 C 23.24 20 21 22.24 21 25 C 21 27.76 23.24 30 26 30 H 38 C 43.52 30 48 34.48 48 40 C 48 45.52 43.52 50 38 50 H 19 C 17.9 50 17 49.1 17 48 C 17 46.9 17.9 46 19 46 H 38 C 40.76 46 43 43.76 43 40 C 43 36.24 40.76 34 38 34 H 26 C 20.48 34 16 29.52 16 25 C 16 19.48 20.48 16 26 16 H 45 Z" fill="url(#split-black-yellow)"/>
+
+    <!-- Spreadsheet Column Cutouts (Clean White Separation Lines) -->
+    <rect x="32" y="16" width="2.5" height="4" rx="1.25" fill="#FFFFFF"/>
+    <rect x="29" y="46" width="2.5" height="4" rx="1.25" fill="#FFFFFF"/>
+
+    <!-- Center Yellow Matrix Bar -->
+    <rect x="23" y="30" width="18" height="4" rx="2" fill="url(#dark-yellow-bar)"/>
+  </g>
+
+  <!-- Horizontal Laser Scan Guide (Yellow) -->
+  <line x1="6" y1="32" x2="58" y2="32" stroke="url(#yellow-scan-laser)" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,9 @@
+Flask>=3.0.0
+flask-cors>=5.0.0
+opencv-python-headless>=4.10.0
+numpy>=1.26.0
+lxml>=5.0.0
+rapidocr>=3.0.0
+rapid-table>=3.0.0
+onnxruntime>=1.19.0
+

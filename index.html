@@ -1,0 +1,1526 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="description"
+    content="ScanSheet - Turn table images into editable Excel files. Commercial-grade document and table extraction.">
+
+  <title>ScanSheet - Turn table images into editable Excel files</title>
+
+  <!-- Favicon / App Icon -->
+  <link rel="icon" type="image/svg+xml" href="assets/icons/logo.svg">
+
+  <!-- Core Stylesheets -->
+  <link rel="stylesheet" href="css/style.css?v=6.3">
+  <link rel="stylesheet" href="css/responsive.css?v=6.3">
+
+  <!-- Google Identity Services (GSI) -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+  <!-- EmailJS SDK for Email OTP Verification -->
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+</head>
+
+<body>
+  <!-- Screen reader live region for accessibility announcements -->
+  <div id="a11y-live-region" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Header -->
+  <header class="app-header" role="banner">
+    <div class="header-container">
+      <div class="header-left">
+        <!-- Left Side Toggle Bar Trigger Button (Visible on all screens) -->
+        <button type="button" id="mobile-menu-toggle" class="btn-mobile-menu" aria-label="Open Navigation Menu" title="Menu">
+          <img src="assets/icons/menu.svg" alt="" width="22" height="22">
+        </button>
+
+        <div class="brand-wrapper">
+          <div class="brand-icon-wrapper" aria-hidden="true">
+            <img src="assets/icons/logo.svg" alt="" class="brand-icon" width="40" height="40">
+          </div>
+          <h1 class="brand-title">ScanSheet</h1>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <!-- Desktop Quick Actions (History, Auth / Profile) -->
+        <nav class="desktop-nav" aria-label="Main Navigation">
+          <ul class="nav-links-list">
+            <li><button type="button" class="nav-link-btn nav-history-btn" id="nav-btn-history"><span aria-hidden="true">🕒</span><span>History</span></button></li>
+            <li><button type="button" class="btn-primary-sm" id="nav-btn-login">Login</button></li>
+          </ul>
+        </nav>
+      </div>
+    </div>
+  </header>
+
+  <!-- Side Navigation Toggle Drawer -->
+  <div id="drawer-backdrop" class="drawer-backdrop" aria-hidden="true"></div>
+  <aside id="mobile-nav-drawer" class="mobile-drawer" aria-label="Side Navigation Menu" aria-hidden="true">
+    <div class="drawer-header">
+      <div class="brand-wrapper">
+        <img src="assets/icons/logo.svg" alt="" width="32" height="32">
+        <span class="brand-title-sm">ScanSheet</span>
+      </div>
+      <button type="button" id="drawer-close-btn" class="drawer-close-btn" aria-label="Close menu">
+        <img src="assets/icons/close.svg" alt="" width="20" height="20">
+      </button>
+    </div>
+    <nav class="drawer-nav" aria-label="Sidebar Links">
+      <ul class="nav-links-list drawer-links-list">
+        <li><a href="#main-content" class="nav-link active drawer-nav-home" id="drawer-btn-home">Home</a></li>
+        <li><button type="button" class="nav-link-btn drawer-nav-features" id="drawer-btn-features">Features</button></li>
+        <li><button type="button" class="nav-link-btn nav-btn-multi-export" id="drawer-btn-multi-export">Multi-Export</button></li>
+        <li class="drawer-mobile-only"><button type="button" class="nav-link-btn drawer-nav-history" id="drawer-btn-history"><span aria-hidden="true">🕒</span><span>History</span></button></li>
+        <li class="drawer-mobile-only"><button type="button" class="btn-primary-sm drawer-nav-login" id="drawer-btn-login">Login</button></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <!-- Main Content Area -->
+  <main class="app-main" id="main-content" role="main">
+    <!-- User Dashboard View -->
+    <div id="user-dashboard" class="user-dashboard-wrapper">
+      <!-- Hero / Intro -->
+      <section class="hero-section" aria-labelledby="tagline-heading">
+        <h2 id="tagline-heading" class="app-tagline">Turn table and scanned images into editable Excel, Word, PDF and
+          Image files.</h2>
+        <p class="hero-subtext">
+          Accurate table & text extraction designed for professionals. Export individually or bundle multiple files.
+        </p>
+
+        <!-- Interactive Format Showcase & Triggers -->
+        <div class="format-badges-container" aria-label="Supported Export Formats">
+          <button type="button" class="format-badge format-badge-excel" id="badge-excel"
+            title="Click to view Excel export option">
+            <img src="assets/icons/sheet.svg" alt="" width="14" height="14"> Excel (.xlsx)
+          </button>
+          <button type="button" class="format-badge format-badge-word" id="badge-word"
+            title="Click to view Word export option">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#2563eb" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+            </svg> Word (.docx)
+          </button>
+          <button type="button" class="format-badge format-badge-pdf" id="badge-pdf"
+            title="Click to view PDF export option">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#dc2626" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+            </svg> PDF (.pdf)
+          </button>
+          <button type="button" class="format-badge format-badge-png" id="badge-png"
+            title="Click to view Image export option">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#059669" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <circle cx="8.5" cy="8.5" r="1.5"></circle>
+            </svg> Image (.png)
+          </button>
+          <button type="button" class="format-badge format-badge-multi" id="badge-multi-export"
+            title="Click to open Multi-File Export dialog">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#7c3aed" stroke-width="2">
+              <path
+                d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
+              </path>
+            </svg> Multi-File Export
+          </button>
+        </div>
+
+        <div class="hero-actions-bar">
+          <button type="button" class="btn-primary" id="hero-btn-upload" aria-label="Upload Table Image">
+            <img src="assets/icons/upload.svg" alt="" class="btn-icon" width="18" height="18" aria-hidden="true">
+            <span>Upload Table Image</span>
+          </button>
+          <!-- Desktop view: Export as Multiple Files -->
+          <button type="button" class="btn-secondary btn-hero-multi desktop-only-action" id="hero-btn-export-multi"
+            aria-label="Export as Multiple Files">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path
+                d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
+              </path>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+              <line x1="12" y1="22.08" x2="12" y2="12"></line>
+            </svg>
+            <span>Export as Multiple Files</span>
+          </button>
+
+          <!-- Mobile view: Scan (Opens Camera) -->
+          <button type="button" class="btn-secondary btn-hero-scan mobile-only-action" id="hero-btn-mobile-scan"
+            aria-label="Scan Table with Camera">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+              <circle cx="12" cy="13" r="4"></circle>
+            </svg>
+            <span>Scan</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Upload Card -->
+      <section class="action-card" aria-label="Table Image Upload">
+        <!-- Hidden file input supporting JPG, JPEG, PNG, WEBP -->
+        <input type="file" id="hidden-file-input"
+          accept=".jpg,.jpeg,.png,.webp,.JPG,.JPEG,.PNG,.WEBP,image/jpeg,image/png,image/webp" class="sr-only"
+          aria-hidden="true" tabindex="-1">
+        <!-- Hidden camera input for direct mobile camera capture -->
+        <input type="file" id="camera-file-input"
+          accept=".jpg,.jpeg,.png,.webp,image/*" capture="environment" class="sr-only"
+          aria-hidden="true" tabindex="-1">
+
+        <!-- State 1: Drop Zone / Empty Upload Trigger -->
+        <div class="drop-zone" id="upload-drop-zone" tabindex="0" role="button" aria-describedby="upload-description">
+          <div class="drop-zone-icon-container" aria-hidden="true">
+            <img src="assets/icons/upload.svg" alt="" class="drop-zone-icon" width="28" height="28">
+          </div>
+          <h3 class="drop-zone-title">Upload Table Image</h3>
+          <p class="drop-zone-hint" id="upload-description">Supported: JPG, JPEG, PNG table photos, scans, and
+            screenshots
+          </p>
+
+          <div class="drop-zone-actions">
+            <button type="button" class="btn-primary" id="upload-action-btn" aria-label="Upload Table Image">
+              <img src="assets/icons/upload.svg" alt="" class="btn-icon" width="18" height="18" aria-hidden="true">
+              <span>Upload Table Image</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- State 2: Selected Image Preview Screen (Step 3.1) -->
+        <div class="upload-preview-card" id="upload-preview-card" style="display: none;" aria-hidden="true">
+          <div class="preview-header">
+            <div class="preview-header-left">
+              <span class="preview-badge">Image Preview</span>
+              <span class="preview-status-pill">Ready to Scan</span>
+            </div>
+          </div>
+
+          <div class="preview-media-container" id="preview-media-container">
+            <img id="image-preview-element" src="" alt="Selected table image preview" class="preview-thumbnail">
+          </div>
+
+          <!-- Image Quality Warning Banner (Step 3.4) -->
+          <div id="image-quality-warning" class="image-quality-warning" style="display: none;" role="alert"
+            aria-live="polite">
+            <div class="quality-warning-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path>
+                <line x1="12" y1="9" x2="12" y2="13"></line>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+              </svg>
+            </div>
+            <p class="quality-warning-text">This image may produce inaccurate results. Please use a clearer image with
+              the table fully visible.</p>
+          </div>
+
+          <div class="preview-meta" id="preview-meta-section">
+            <div class="preview-meta-grid">
+              <div class="preview-meta-item">
+                <span class="preview-meta-label">File Name</span>
+                <span class="preview-file-name" id="preview-file-name">—</span>
+              </div>
+              <div class="preview-meta-item">
+                <span class="preview-meta-label">File Size</span>
+                <span class="preview-file-size" id="preview-file-size">—</span>
+              </div>
+              <div class="preview-meta-item">
+                <span class="preview-meta-label">Image Dimensions</span>
+                <span class="preview-file-dimensions" id="preview-file-dimensions">—</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="preview-actions">
+            <button type="button" class="btn-primary" id="btn-upload-continue" aria-label="Use This Image">
+              <span>Use This Image</span>
+            </button>
+            <button type="button" class="btn-secondary" id="btn-upload-rotate"
+              aria-label="Rotate image 90 degrees clockwise">
+              <img src="assets/icons/rotate.svg" alt="" width="16" height="16" aria-hidden="true">
+              <span>Rotate</span>
+            </button>
+            <button type="button" class="btn-secondary" id="btn-upload-crop" aria-label="Crop image">
+              <img src="assets/icons/crop.svg" alt="" width="16" height="16" aria-hidden="true">
+              <span>Crop</span>
+            </button>
+            <button type="button" class="btn-secondary" id="btn-upload-change" aria-label="Change image">
+              <img src="assets/icons/upload.svg" alt="" width="16" height="16" aria-hidden="true">
+              <span>Change Image</span>
+            </button>
+            <button type="button" class="btn-danger-outline" id="btn-upload-remove" aria-label="Remove image">
+              <img src="assets/icons/trash.svg" alt="" width="16" height="16" aria-hidden="true">
+              <span>Remove</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- State 3: Table Scanning Screen (Step 4) -->
+        <div class="scanning-card" id="table-scanning-card" style="display: none;" aria-live="polite" aria-busy="true">
+          <div class="scanning-content">
+            <div class="scanning-spinner-wrapper" aria-hidden="true">
+              <div class="scanning-spinner"></div>
+            </div>
+            <h3 class="scanning-title" id="scanning-title">Scanning & Extracting Content...</h3>
+            <p class="scanning-status" id="scanning-status-text">Analyzing image & recognizing text...</p>
+            <button type="button" class="btn-ghost" id="btn-cancel-scanning"
+              style="margin-top: 14px; font-size: 0.85rem; padding: 6px 16px; border: 1px solid var(--border-color, #e2e8f0); border-radius: 6px; cursor: pointer;">
+              <span>Cancel Scan</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- State 3b: No Content Detected Screen (Step 4 Fallback) -->
+        <div class="no-table-card" id="no-table-card" style="display: none;" role="alert">
+          <div class="no-table-icon-wrap" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="#d97706" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+          </div>
+          <h3 class="no-table-title" id="no-table-title">Content Unreadable</h3>
+          <p class="no-table-desc" id="no-table-desc">We couldn't read the content clearly. Please upload a clearer image.</p>
+          <div class="no-table-actions">
+            <button type="button" class="btn-primary" id="btn-try-another-image">
+              <span>Try Another Image</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- State 4: Clean Result / Next Screen (Step 4) -->
+        <div class="scan-result-card" id="scan-result-card" style="display: none;">
+          <div class="scan-result-header">
+            <div class="scan-result-header-left">
+              <span class="preview-badge scan-success-badge">Scan Complete</span>
+              <h3 class="scan-result-title" id="scan-result-title">Extracted Document</h3>
+              <span class="scan-meta-pill" id="scan-table-dimensions">Document Content</span>
+            </div>
+            <div class="scan-result-header-right">
+              <button type="button" class="btn-primary btn-action-sm btn-export-excel" id="btn-export-excel"
+                aria-label="Export as Excel">
+                <img src="assets/icons/sheet.svg" alt="" width="14" height="14" aria-hidden="true">
+                <span>Export as Excel</span>
+              </button>
+              <button type="button" class="btn-secondary btn-action-sm btn-export-docx" id="btn-export-docx"
+                aria-label="Export as Word">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#2563eb" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                  <line x1="16" y1="13" x2="8" y2="13"></line>
+                  <line x1="16" y1="17" x2="8" y2="17"></line>
+                  <line x1="10" y1="9" x2="8" y2="9"></line>
+                </svg>
+                <span>Export as Word</span>
+              </button>
+              <button type="button" class="btn-secondary btn-action-sm btn-export-pdf" id="btn-export-pdf"
+                aria-label="Export as PDF">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#dc2626" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                  <path d="M9 15v-6h2a2 2 0 1 1 0 4H9"></path>
+                </svg>
+                <span>Export as PDF</span>
+              </button>
+              <button type="button" class="btn-secondary btn-action-sm btn-export-png" id="btn-export-png"
+                aria-label="Export as Image">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#059669" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                  <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+                <span>Export as Image</span>
+              </button>
+              <button type="button" class="btn-primary btn-action-sm btn-export-multi" id="btn-export-multi"
+                aria-label="Export Multiple Files" title="Export multiple formats together">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path
+                    d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
+                  </path>
+                  <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                  <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                </svg>
+                <span>Export Multiple Files</span>
+              </button>
+              <button type="button" class="btn-ghost btn-action-sm" id="btn-toggle-compare"
+                aria-label="Compare with image">
+                <img src="assets/icons/eye.svg" alt="" width="14" height="14" aria-hidden="true">
+                <span>Compare</span>
+              </button>
+              <button type="button" class="btn-ghost btn-action-sm" id="btn-result-new-scan"
+                aria-label="Scan another image">
+                <img src="assets/icons/upload.svg" alt="" width="14" height="14" aria-hidden="true">
+                <span>New Scan</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="scan-table-wrapper" id="scan-table-container">
+            <!-- Structured table dynamically rendered here -->
+          </div>
+        </div>
+      </section>
+
+      <!-- Informational Feature Highlights -->
+      <section class="features-grid" aria-label="Application Features">
+        <article class="feature-item">
+          <div class="feature-icon-badge" aria-hidden="true">
+            <img src="assets/icons/sheet.svg" alt="" width="18" height="18">
+          </div>
+          <div>
+            <h4 class="feature-title">Spreadsheet Ready</h4>
+            <p class="feature-desc">Preserves table structure, rows, and columns for easy editing.</p>
+          </div>
+        </article>
+
+        <article class="feature-item">
+          <div class="feature-icon-badge" aria-hidden="true"
+            style="background: rgba(124, 58, 237, 0.1); color: #7c3aed;">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+          </div>
+          <div>
+            <h4 class="feature-title">Multi-Format Export</h4>
+            <p class="feature-desc">Export directly to Excel, Word, PDF, or PNG with one click.</p>
+          </div>
+        </article>
+      </section>
+    </div>
+
+    <!-- Admin Dashboard View (4 Statistics Cards Only) -->
+    <section id="admin-dashboard" class="admin-dashboard-section" style="display: none;" aria-label="Admin Dashboard">
+      <div class="admin-dashboard-header">
+        <span class="admin-header-badge">Admin Dashboard</span>
+        <h2 class="admin-dashboard-title">System Overview</h2>
+        <p class="admin-dashboard-subtitle">Platform performance and registered user accounts</p>
+      </div>
+
+      <div class="admin-stats-grid">
+        <!-- 1. Total Users -->
+        <div class="admin-stat-card stat-card-users">
+          <div class="stat-card-icon-wrapper icon-users" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+          </div>
+          <div class="stat-card-content">
+            <span class="stat-card-label">Total Users</span>
+            <div class="stat-card-value" id="stat-total-users">0</div>
+          </div>
+        </div>
+
+        <!-- 2. Total Projects -->
+        <div class="admin-stat-card stat-card-projects">
+          <div class="stat-card-icon-wrapper icon-projects" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </div>
+          <div class="stat-card-content">
+            <span class="stat-card-label">Total Projects</span>
+            <div class="stat-card-value" id="stat-total-projects">0</div>
+          </div>
+        </div>
+
+        <!-- 3. Daily Uploads -->
+        <div class="admin-stat-card stat-card-uploads">
+          <div class="stat-card-icon-wrapper icon-uploads" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+          </div>
+          <div class="stat-card-content">
+            <span class="stat-card-label">Daily Uploads</span>
+            <div class="stat-card-value" id="stat-daily-uploads">0</div>
+          </div>
+        </div>
+
+        <!-- 4. Excel Generated -->
+        <div class="admin-stat-card stat-card-excel">
+          <div class="stat-card-icon-wrapper icon-excel" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="8" y1="13" x2="16" y2="13"></line>
+              <line x1="8" y1="17" x2="16" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+          </div>
+          <div class="stat-card-content">
+            <span class="stat-card-label">Files Generated</span>
+            <div class="stat-card-value" id="stat-excel-generated">0</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Registered Users Section -->
+      <div class="admin-users-section">
+        <div class="admin-section-header">
+          <div class="admin-section-header-left">
+            <div class="admin-section-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+            </div>
+            <div>
+              <div class="admin-section-title-wrap">
+                <h3 class="admin-section-title">Registered Users Directory</h3>
+                <span class="admin-users-count-badge" id="admin-users-badge">0 Users</span>
+              </div>
+              <p class="admin-section-desc">Real-time list of all user accounts and registered email addresses stored in
+                the system</p>
+            </div>
+          </div>
+
+          <div class="admin-section-actions">
+            <div class="admin-search-wrapper">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+                aria-hidden="true">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <input type="text" id="admin-user-search" class="admin-search-input"
+                placeholder="Search by email or name..." aria-label="Search registered users">
+            </div>
+            <button type="button" id="btn-admin-export-users" class="btn-admin-action"
+              title="Export registered users to CSV">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              <span>Export CSV</span>
+            </button>
+            <button type="button" id="btn-admin-refresh-users" class="btn-admin-icon" title="Refresh user list"
+              aria-label="Refresh user list">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Users Table Card -->
+        <div class="admin-users-card">
+          <div class="admin-table-container">
+            <table class="admin-users-table" aria-label="Registered Users Table">
+              <thead>
+                <tr>
+                  <th scope="col" style="width: 50px;">#</th>
+                  <th scope="col">User</th>
+                  <th scope="col">Registered Email</th>
+                  <th scope="col">Sign-in Method</th>
+                  <th scope="col">Registered At</th>
+                  <th scope="col">Role</th>
+                  <th scope="col" style="text-align: right;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="admin-users-tbody">
+                <!-- Rendered dynamically by app.js -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Empty State Container -->
+          <div id="admin-users-empty" class="admin-users-empty" style="display: none;">
+            <div class="admin-empty-icon">
+              <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="#94a3b8" stroke-width="1.75">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="8.5" cy="7" r="4"></circle>
+                <line x1="20" y1="8" x2="20" y2="14"></line>
+                <line x1="23" y1="11" x2="17" y2="11"></line>
+              </svg>
+            </div>
+            <h4>No registered users found</h4>
+            <p>Users who register via email or Google sign-in will be listed here with their email addresses.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="app-footer" role="contentinfo">
+    <div class="footer-container">
+      <p class="footer-copy">&copy; 2026 ScanSheet. All rights reserved.</p>
+
+    </div>
+  </footer>
+
+  <!-- =========================================================================
+       MODALS & DIALOGS (Requirement 1, 2, 3, 6, 8)
+       ========================================================================= -->
+
+  <!-- 0. Features Modal (Top Bar Features Content) -->
+  <div id="features-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="features-modal-title"
+    aria-hidden="true">
+    <div class="modal-card modal-card-lg" style="max-width: 680px;">
+      <div class="modal-header"
+        style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--color-surface-border); padding-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="brand-icon-wrapper"
+            style="width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 10px; background: rgba(5, 150, 105, 0.08); padding: 4px;"
+            aria-hidden="true">
+            <img src="assets/icons/logo.svg" alt="" width="34" height="34" class="brand-icon">
+          </div>
+          <div>
+            <h3 id="features-modal-title" class="modal-title" style="margin: 0; font-size: 1.25rem;">ScanSheet Features
+            </h3>
+            <p style="margin: 2px 0 0; font-size: 0.85rem; color: var(--color-text-muted);">Powerful AI and Computer
+              Vision table recognition</p>
+          </div>
+        </div>
+        <button type="button" class="modal-close-btn modal-close-trigger" aria-label="Close dialog">
+          <img src="assets/icons/close.svg" alt="" width="18" height="18">
+        </button>
+      </div>
+
+      <div class="modal-body" style="padding: 16px 0; max-height: 60vh; overflow-y: auto;">
+        <div class="features-modal-grid"
+          style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px;">
+
+          <div class="feature-card-item"
+            style="display: flex; gap: 14px; padding: 14px; border: 1px solid var(--color-surface-border); border-radius: 10px; background: var(--color-surface);">
+            <div
+              style="width: 38px; height: 38px; border-radius: 8px; background: rgba(37, 99, 235, 0.1); color: #2563eb; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="3" y1="9" x2="21" y2="9"></line>
+                <line x1="3" y1="15" x2="21" y2="15"></line>
+                <line x1="9" y1="3" x2="9" y2="21"></line>
+                <line x1="15" y1="3" x2="15" y2="21"></line>
+              </svg>
+            </div>
+            <div>
+              <h4 style="margin: 0 0 4px; font-size: 0.95rem; font-weight: 600; color: var(--color-text-main);">Smart
+                Table Recognition</h4>
+              <p style="margin: 0; font-size: 0.82rem; color: var(--color-text-muted); line-height: 1.45;">Auto-detects
+                bordered, ruled, and borderless tables with intelligent morphological line projection.</p>
+            </div>
+          </div>
+
+          <div class="feature-card-item"
+            style="display: flex; gap: 14px; padding: 14px; border: 1px solid var(--color-surface-border); border-radius: 10px; background: var(--color-surface);">
+            <div
+              style="width: 38px; height: 38px; border-radius: 8px; background: rgba(5, 150, 105, 0.1); color: #059669; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+            </div>
+            <div>
+              <h4 style="margin: 0 0 4px; font-size: 0.95rem; font-weight: 600; color: var(--color-text-main);">
+                Multi-Format Export</h4>
+              <p style="margin: 0; font-size: 0.82rem; color: var(--color-text-muted); line-height: 1.45;">Export to
+                Excel (.xlsx), Microsoft Word (.docx), PDF (.pdf), or high-res image (.png) with 1 click.</p>
+            </div>
+          </div>
+
+          <div class="feature-card-item"
+            style="display: flex; gap: 14px; padding: 14px; border: 1px solid var(--color-surface-border); border-radius: 10px; background: var(--color-surface);">
+            <div
+              style="width: 38px; height: 38px; border-radius: 8px; background: rgba(14, 165, 233, 0.1); color: #0ea5e9; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+              </svg>
+            </div>
+            <div>
+              <h4 style="margin: 0 0 4px; font-size: 0.95rem; font-weight: 600; color: var(--color-text-main);">Inline
+                Table Editor</h4>
+              <p style="margin: 0; font-size: 0.82rem; color: var(--color-text-muted); line-height: 1.45;">Edit cells
+                live in your browser, add or delete rows and columns, and review low-confidence cells.</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="modal-footer"
+        style="display: flex; justify-content: flex-end; padding-top: 14px; border-top: 1px solid var(--color-surface-border);">
+        <button type="button" class="btn-primary modal-close-trigger" style="min-height: 40px; padding: 0 20px;">
+          <span>Got It</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Multi-Export Info Modal (Top Bar Multi-Export Content) -->
+  <div id="multi-export-info-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="multi-export-info-title" aria-hidden="true">
+    <div class="modal-card modal-card-lg" style="max-width: 620px;">
+      <div class="modal-header" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--color-surface-border); padding-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="brand-icon-wrapper" style="width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 10px; background: rgba(5, 150, 105, 0.08); padding: 4px;" aria-hidden="true">
+            <img src="assets/icons/logo.svg" alt="" width="34" height="34" class="brand-icon">
+          </div>
+          <div>
+            <h3 id="multi-export-info-title" class="modal-title" style="margin: 0; font-size: 1.25rem;">About Multi-Export</h3>
+            <p style="margin: 2px 0 0; font-size: 0.85rem; color: var(--color-text-muted);">Simultaneous multi-format conversion & packaging</p>
+          </div>
+        </div>
+        <button type="button" class="modal-close-btn modal-close-trigger" aria-label="Close dialog">
+          <img src="assets/icons/close.svg" alt="" width="18" height="18">
+        </button>
+      </div>
+
+      <div class="modal-body" style="padding: 20px 0; max-height: 60vh; overflow-y: auto;">
+        <div style="font-size: 0.95rem; line-height: 1.6; color: var(--color-text-main); margin-bottom: 18px;">
+          <p style="margin: 0 0 10px;">
+            <strong>Multi-Export</strong> is ScanSheet's batch conversion feature that lets you export your scanned tables into multiple file formats simultaneously with a single click.
+          </p>
+          <p style="margin: 0; color: var(--color-text-muted); font-size: 0.88rem;">
+            Instead of converting your table file-by-file or relying on separate third-party software, Multi-Export packages all desired formats together in seconds.
+          </p>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <div style="display: flex; gap: 12px; align-items: flex-start; padding: 12px; background: var(--color-surface-subtle); border: 1px solid var(--color-surface-border); border-radius: 8px;">
+            <span style="font-size: 1.2rem; line-height: 1;" aria-hidden="true">📊</span>
+            <div>
+              <div style="font-weight: 600; font-size: 0.9rem; color: var(--color-text-main);">Microsoft Excel (.xlsx)</div>
+              <div style="font-size: 0.82rem; color: var(--color-text-muted);">Fully structured spreadsheets with preserved rows, columns, and numeric formats ready for data analysis.</div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 12px; align-items: flex-start; padding: 12px; background: var(--color-surface-subtle); border: 1px solid var(--color-surface-border); border-radius: 8px;">
+            <span style="font-size: 1.2rem; line-height: 1;" aria-hidden="true">📝</span>
+            <div>
+              <div style="font-weight: 600; font-size: 0.9rem; color: var(--color-text-main);">Microsoft Word (.docx)</div>
+              <div style="font-size: 0.82rem; color: var(--color-text-muted);">Cleanly formatted document tables ready for business reports, documentation, and office printing.</div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 12px; align-items: flex-start; padding: 12px; background: var(--color-surface-subtle); border: 1px solid var(--color-surface-border); border-radius: 8px;">
+            <span style="font-size: 1.2rem; line-height: 1;" aria-hidden="true">📄</span>
+            <div>
+              <div style="font-weight: 600; font-size: 0.9rem; color: var(--color-text-main);">PDF Document (.pdf)</div>
+              <div style="font-size: 0.82rem; color: var(--color-text-muted);">Vector-quality PDF with crisp table borders, headers, and professional layout.</div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 12px; align-items: flex-start; padding: 12px; background: var(--color-surface-subtle); border: 1px solid var(--color-surface-border); border-radius: 8px;">
+            <span style="font-size: 1.2rem; line-height: 1;" aria-hidden="true">🖼️</span>
+            <div>
+              <div style="font-weight: 600; font-size: 0.9rem; color: var(--color-text-main);">High-Resolution Image (.png)</div>
+              <div style="font-size: 0.82rem; color: var(--color-text-muted);">Lossless graphic preview suitable for embedding into slide decks, chats, or presentations.</div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 12px; align-items: flex-start; padding: 12px; background: var(--color-surface-subtle); border: 1px solid var(--color-surface-border); border-radius: 8px;">
+            <span style="font-size: 1.2rem; line-height: 1;" aria-hidden="true">📦</span>
+            <div>
+              <div style="font-weight: 600; font-size: 0.9rem; color: var(--color-text-main);">ZIP Archive Bundle</div>
+              <div style="font-size: 0.82rem; color: var(--color-text-muted);">Compresses and bundles all generated files into a single convenient archive for instant download or sharing.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="display: flex; justify-content: flex-end; padding-top: 14px; border-top: 1px solid var(--color-surface-border);">
+        <button type="button" class="btn-primary modal-close-trigger" style="min-height: 40px; padding: 0 20px;">
+          <span>Got It</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 1. Login Gate Modal (Requirement 1) -->
+  <div id="auth-gate-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="gate-modal-title"
+    aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-icon-badge" aria-hidden="true">
+          <img src="assets/icons/sheet.svg" alt="" width="24" height="24">
+        </div>
+        <button type="button" class="modal-close-btn modal-close-trigger" aria-label="Close dialog">
+          <img src="assets/icons/close.svg" alt="" width="18" height="18">
+        </button>
+      </div>
+      <div class="modal-body">
+        <h3 id="gate-modal-title" class="modal-title">Sign in to save your history</h3>
+        <p class="modal-description">
+          Create a ScanSheet account to keep your converted tables in your history and access them later.
+        </p>
+      </div>
+      <div class="modal-footer modal-footer-stacked">
+        <button type="button" class="btn-google-auth btn-block" id="gate-google-btn" aria-label="Continue with Google">
+          <img src="assets/icons/google.svg" alt="" width="20" height="20" class="google-auth-icon" aria-hidden="true">
+          <span>Continue with Google</span>
+        </button>
+        <div class="auth-divider auth-divider-sm" role="separator" aria-label="or">
+          <span class="auth-divider-line"></span>
+          <span class="auth-divider-text">or</span>
+          <span class="auth-divider-line"></span>
+        </div>
+        <button type="button" class="btn-primary btn-block" id="gate-login-btn">
+          <span>Login with Email</span>
+        </button>
+        <button type="button" class="btn-secondary btn-block" id="gate-signup-btn">
+          <span>Create Account</span>
+        </button>
+        <button type="button" class="btn-ghost btn-block" id="gate-cancel-btn">
+          <span>Cancel</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Login Screen / Modal (Requirement 2) -->
+  <div id="login-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="login-modal-title"
+    aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-header-centered">
+        <button type="button" class="modal-close-btn modal-close-trigger modal-close-corner"
+          aria-label="Close login dialog">
+          <img src="assets/icons/close.svg" alt="" width="18" height="18">
+        </button>
+        <div class="modal-brand-emblem" aria-hidden="true">
+          <img src="assets/icons/logo.svg" alt="" class="modal-brand-logo" width="48" height="48">
+        </div>
+        <h3 id="login-modal-title" class="modal-title modal-title-centered">Login to ScanSheet</h3>
+        <p class="modal-subtitle-centered">Enter your credentials to continue</p>
+      </div>
+      <form id="login-form" class="modal-form" novalidate>
+        <div id="login-error-msg" class="form-alert-error" style="display: none;" role="alert"></div>
+
+        <button type="button" class="btn-google-auth btn-block" id="btn-google-login" aria-label="Continue with Google">
+          <img src="assets/icons/google.svg" alt="" width="20" height="20" class="google-auth-icon" aria-hidden="true">
+          <span>Continue with Google</span>
+        </button>
+
+        <div class="auth-divider" role="separator" aria-label="or continue with email">
+          <span class="auth-divider-line"></span>
+          <span class="auth-divider-text">or continue with email</span>
+          <span class="auth-divider-line"></span>
+        </div>
+
+        <div class="form-group">
+          <label for="login-email" class="form-label">Email Address or Username</label>
+          <input type="text" id="login-email" name="email" class="form-input" placeholder="Enter email or username"
+            required autocomplete="username">
+        </div>
+
+        <div class="form-group">
+          <div class="label-row">
+            <label for="login-password" class="form-label">Password</label>
+            <button type="button" id="btn-forgot-password" class="link-btn-subtle">Forgot Password?</button>
+          </div>
+          <div class="input-password-wrapper">
+            <input type="password" id="login-password" name="password" class="form-input"
+              placeholder="Enter your password" required autocomplete="current-password">
+            <button type="button" class="btn-toggle-password" data-target="login-password"
+              aria-label="Toggle password visibility" aria-pressed="false">
+              <img src="assets/icons/eye.svg" alt="" width="18" height="18">
+              <span class="pwd-toggle-label sr-only">Show Password</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="modal-footer modal-footer-stacked">
+          <button type="submit" class="btn-primary btn-block" id="btn-submit-login">
+            <span>Login</span>
+          </button>
+          <p class="form-switch-prompt">
+            Don't have an account?
+            <button type="button" class="link-btn-inline" id="switch-to-signup">Create Account</button>
+          </p>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3. Sign Up Screen / Modal (Requirement 3) -->
+  <div id="signup-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="signup-modal-title"
+    aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-header-centered">
+        <button type="button" class="modal-close-btn modal-close-trigger modal-close-corner"
+          aria-label="Close signup dialog">
+          <img src="assets/icons/close.svg" alt="" width="18" height="18">
+        </button>
+        <div class="modal-brand-emblem" aria-hidden="true">
+          <img src="assets/icons/logo.svg" alt="" class="modal-brand-logo" width="48" height="48">
+        </div>
+        <h3 id="signup-modal-title" class="modal-title modal-title-centered">Create ScanSheet Account</h3>
+        <p class="modal-subtitle-centered">Sign up to save and export your converted tables</p>
+      </div>
+      <form id="signup-form" class="modal-form" novalidate>
+        <div id="signup-error-msg" class="form-alert-error" style="display: none;" role="alert"></div>
+
+        <button type="button" class="btn-google-auth btn-block" id="btn-google-signup"
+          aria-label="Continue with Google">
+          <img src="assets/icons/google.svg" alt="" width="20" height="20" class="google-auth-icon" aria-hidden="true">
+          <span>Continue with Google</span>
+        </button>
+
+        <div class="auth-divider" role="separator" aria-label="or sign up with email">
+          <span class="auth-divider-line"></span>
+          <span class="auth-divider-text">or sign up with email</span>
+          <span class="auth-divider-line"></span>
+        </div>
+
+        <div class="form-group">
+          <label for="signup-name" class="form-label">Full Name</label>
+          <input type="text" id="signup-name" name="name" class="form-input" placeholder="Enter your full name" required
+            autocomplete="name">
+        </div>
+
+        <div class="form-group">
+          <label for="signup-email" class="form-label">Email Address</label>
+          <input type="email" id="signup-email" name="email" class="form-input" placeholder="Enter your email address"
+            required autocomplete="email">
+        </div>
+
+        <div class="form-group">
+          <label for="signup-password" class="form-label">Password</label>
+          <div class="input-password-wrapper">
+            <input type="password" id="signup-password" name="password" class="form-input"
+              placeholder="Enter your password" required autocomplete="new-password">
+            <button type="button" class="btn-toggle-password" data-target="signup-password"
+              aria-label="Toggle password visibility" aria-pressed="false">
+              <img src="assets/icons/eye.svg" alt="" width="18" height="18">
+              <span class="pwd-toggle-label sr-only">Show Password</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="signup-confirm-password" class="form-label">Confirm Password</label>
+          <div class="input-password-wrapper">
+            <input type="password" id="signup-confirm-password" name="confirmPassword" class="form-input"
+              placeholder="Confirm your password" required autocomplete="new-password">
+            <button type="button" class="btn-toggle-password" data-target="signup-confirm-password"
+              aria-label="Toggle confirm password visibility" aria-pressed="false">
+              <img src="assets/icons/eye.svg" alt="" width="18" height="18">
+              <span class="pwd-toggle-label sr-only">Show Password</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="modal-footer modal-footer-stacked">
+          <button type="submit" class="btn-primary btn-block" id="btn-submit-signup">
+            <span>Create Account</span>
+          </button>
+          <p class="form-switch-prompt">
+            Already have an account?
+            <button type="button" class="link-btn-inline" id="switch-to-login">Login</button>
+          </p>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3.5. Email OTP Verification Modal -->
+  <div id="otp-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="otp-modal-title"
+    aria-hidden="true">
+    <div class="modal-card modal-card-otp text-center">
+      <div class="modal-header-centered">
+        <button type="button" class="modal-close-btn modal-close-trigger modal-close-corner"
+          aria-label="Close OTP verification dialog">
+          <img src="assets/icons/close.svg" alt="" width="18" height="18">
+        </button>
+        <div class="modal-brand-emblem" aria-hidden="true">
+          <img src="assets/icons/logo.svg" alt="ScanSheet Logo" class="modal-brand-logo" width="56" height="56">
+        </div>
+        <h3 id="otp-modal-title" class="modal-title modal-title-centered">Email Verification</h3>
+        <p class="modal-subtitle-centered">
+          We have sent a 6-digit OTP code to<br>
+          <strong id="otp-modal-email" class="otp-highlight-email">user@example.com</strong>
+        </p>
+      </div>
+
+      <form id="otp-form" class="modal-form" novalidate>
+        <div id="otp-error-msg" class="form-alert-error" style="display: none;" role="alert"></div>
+
+        <div class="otp-input-group">
+          <label class="sr-only" for="otp-digit-1">Enter 6-digit verification code</label>
+          <div class="otp-boxes-container" id="otp-boxes-container">
+            <input type="text" class="otp-digit-input" id="otp-digit-1" maxlength="1" inputmode="numeric"
+              pattern="[0-9]*" autocomplete="one-time-code" required aria-label="Digit 1">
+            <input type="text" class="otp-digit-input" id="otp-digit-2" maxlength="1" inputmode="numeric"
+              pattern="[0-9]*" required aria-label="Digit 2">
+            <input type="text" class="otp-digit-input" id="otp-digit-3" maxlength="1" inputmode="numeric"
+              pattern="[0-9]*" required aria-label="Digit 3">
+            <input type="text" class="otp-digit-input" id="otp-digit-4" maxlength="1" inputmode="numeric"
+              pattern="[0-9]*" required aria-label="Digit 4">
+            <input type="text" class="otp-digit-input" id="otp-digit-5" maxlength="1" inputmode="numeric"
+              pattern="[0-9]*" required aria-label="Digit 5">
+            <input type="text" class="otp-digit-input" id="otp-digit-6" maxlength="1" inputmode="numeric"
+              pattern="[0-9]*" required aria-label="Digit 6">
+          </div>
+        </div>
+
+        <!-- Expiration Timer: Exactly 1 min 50 sec countdown -->
+        <div class="otp-timer-wrapper" id="otp-timer-wrapper">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+          <span class="otp-timer-label">Code expires in:</span>
+          <span id="otp-countdown" class="otp-countdown-badge">01:50</span>
+        </div>
+
+        <div class="modal-footer modal-footer-stacked">
+          <button type="submit" class="btn-primary btn-block" id="btn-submit-otp">
+            <span>Verify & Create Account</span>
+          </button>
+
+          <div class="otp-resend-row">
+            <span class="otp-resend-hint">Didn't receive the email?</span>
+            <button type="button" class="link-btn-inline" id="btn-resend-otp" disabled>
+              <span>Resend Code</span>
+            </button>
+          </div>
+
+          <div class="otp-change-email-row">
+            <button type="button" class="link-btn-subtle" id="btn-otp-change-email">
+              ← Change Email or Details
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3.6. Forgot Password Screen (Workflow Step 1) -->
+  <div id="forgot-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="forgot-modal-title"
+    aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-header-centered">
+        <button type="button" class="modal-close-btn modal-close-trigger modal-close-corner"
+          aria-label="Close forgot password dialog">
+          <img src="assets/icons/close.svg" alt="" width="18" height="18">
+        </button>
+        <div class="modal-brand-emblem" aria-hidden="true">
+          <img src="assets/icons/logo.svg" alt="ScanSheet Logo" class="modal-brand-logo" width="48" height="48">
+        </div>
+        <h3 id="forgot-modal-title" class="modal-title modal-title-centered">Forgot Password?</h3>
+        <p class="modal-subtitle-centered">Enter your registered email address to receive a recovery code</p>
+      </div>
+
+      <form id="forgot-form" class="modal-form" novalidate>
+        <div id="forgot-error-msg" class="form-alert-error" style="display: none;" role="alert"></div>
+
+        <div class="form-group">
+          <label for="forgot-email" class="form-label">Registered Email Address</label>
+          <input type="email" id="forgot-email" name="email" class="form-input"
+            placeholder="Enter registered email address" required autocomplete="email">
+        </div>
+
+        <div class="modal-footer modal-footer-stacked">
+          <button type="submit" class="btn-primary btn-block" id="btn-forgot-continue">
+            <span>Continue</span>
+          </button>
+          <p class="form-switch-prompt">
+            Remember your password?
+            <button type="button" class="link-btn-inline" id="forgot-back-to-login">Login</button>
+          </p>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3.7. Verify Recovery Code Screen (Workflow Step 2: Verify Registered Email) -->
+  <div id="recovery-verify-modal" class="modal-backdrop" role="dialog" aria-modal="true"
+    aria-labelledby="recovery-verify-title" aria-hidden="true">
+    <div class="modal-card modal-card-otp text-center">
+      <div class="modal-header-centered">
+        <button type="button" class="modal-close-btn modal-close-trigger modal-close-corner"
+          aria-label="Close recovery verification dialog">
+          <img src="assets/icons/close.svg" alt="" width="18" height="18">
+        </button>
+        <div class="modal-brand-emblem" aria-hidden="true">
+          <img src="assets/icons/logo.svg" alt="ScanSheet Logo" class="modal-brand-logo" width="56" height="56">
+        </div>
+        <h3 id="recovery-verify-title" class="modal-title modal-title-centered">Verify Recovery Code</h3>
+        <p class="modal-subtitle-centered">
+          We have sent a 6-digit recovery code to<br>
+          <strong id="recovery-verify-email" class="otp-highlight-email">user@example.com</strong>
+        </p>
+      </div>
+
+      <form id="recovery-verify-form" class="modal-form" novalidate>
+        <div id="recovery-error-msg" class="form-alert-error" style="display: none;" role="alert"></div>
+
+        <div class="otp-input-group">
+          <label class="sr-only" for="recovery-digit-1">Enter 6-digit recovery code</label>
+          <div class="otp-boxes-container" id="recovery-boxes-container">
+            <input type="text" class="otp-digit-input recovery-digit-input" id="recovery-digit-1" maxlength="1"
+              inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" required aria-label="Digit 1">
+            <input type="text" class="otp-digit-input recovery-digit-input" id="recovery-digit-2" maxlength="1"
+              inputmode="numeric" pattern="[0-9]*" required aria-label="Digit 2">
+            <input type="text" class="otp-digit-input recovery-digit-input" id="recovery-digit-3" maxlength="1"
+              inputmode="numeric" pattern="[0-9]*" required aria-label="Digit 3">
+            <input type="text" class="otp-digit-input recovery-digit-input" id="recovery-digit-4" maxlength="1"
+              inputmode="numeric" pattern="[0-9]*" required aria-label="Digit 4">
+            <input type="text" class="otp-digit-input recovery-digit-input" id="recovery-digit-5" maxlength="1"
+              inputmode="numeric" pattern="[0-9]*" required aria-label="Digit 5">
+            <input type="text" class="otp-digit-input recovery-digit-input" id="recovery-digit-6" maxlength="1"
+              inputmode="numeric" pattern="[0-9]*" required aria-label="Digit 6">
+          </div>
+        </div>
+
+        <!-- Expiration Timer: 1 min 50 sec countdown -->
+        <div class="otp-timer-wrapper" id="recovery-timer-wrapper">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+          <span class="otp-timer-label">Code expires in:</span>
+          <span id="recovery-countdown" class="otp-countdown-badge">01:50</span>
+        </div>
+
+        <div class="modal-footer modal-footer-stacked">
+          <button type="submit" class="btn-primary btn-block" id="btn-submit-recovery-verify">
+            <span>Continue</span>
+          </button>
+
+          <div class="otp-resend-row">
+            <span class="otp-resend-hint">Didn't receive the email?</span>
+            <button type="button" class="link-btn-inline" id="btn-resend-recovery" disabled>
+              <span>Resend Code</span>
+            </button>
+          </div>
+
+          <div class="otp-change-email-row">
+            <button type="button" class="link-btn-subtle" id="btn-recovery-change-email">
+              ← Change Email or Details
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3.8. Create New Password Screen (Workflow Step 3) -->
+  <div id="reset-password-modal" class="modal-backdrop" role="dialog" aria-modal="true"
+    aria-labelledby="reset-modal-title" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-header-centered">
+        <button type="button" class="modal-close-btn modal-close-trigger modal-close-corner"
+          aria-label="Close new password dialog">
+          <img src="assets/icons/close.svg" alt="" width="18" height="18">
+        </button>
+        <div class="modal-brand-emblem" aria-hidden="true">
+          <img src="assets/icons/logo.svg" alt="ScanSheet Logo" class="modal-brand-logo" width="48" height="48">
+        </div>
+        <h3 id="reset-modal-title" class="modal-title modal-title-centered">Create New Password</h3>
+        <p class="modal-subtitle-centered">Enter and confirm your new account password</p>
+      </div>
+
+      <form id="reset-password-form" class="modal-form" novalidate>
+        <div id="reset-error-msg" class="form-alert-error" style="display: none;" role="alert"></div>
+
+        <div class="form-group">
+          <label for="reset-new-password" class="form-label">New Password</label>
+          <div class="input-password-wrapper">
+            <input type="password" id="reset-new-password" name="newPassword" class="form-input"
+              placeholder="Enter new password (min. 6 characters)" required autocomplete="new-password">
+            <button type="button" class="btn-toggle-password" data-target="reset-new-password"
+              aria-label="Toggle new password visibility" aria-pressed="false">
+              <img src="assets/icons/eye.svg" alt="" width="18" height="18">
+              <span class="pwd-toggle-label sr-only">Show Password</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="reset-confirm-password" class="form-label">Retype New Password</label>
+          <div class="input-password-wrapper">
+            <input type="password" id="reset-confirm-password" name="confirmPassword" class="form-input"
+              placeholder="Retype your new password" required autocomplete="new-password">
+            <button type="button" class="btn-toggle-password" data-target="reset-confirm-password"
+              aria-label="Toggle confirm new password visibility" aria-pressed="false">
+              <img src="assets/icons/eye.svg" alt="" width="18" height="18">
+              <span class="pwd-toggle-label sr-only">Show Password</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="modal-footer modal-footer-stacked">
+          <button type="submit" class="btn-primary btn-block" id="btn-submit-reset-password">
+            <span>Reset Password</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3.9. Password Reset Success Screen (Workflow Step 4) -->
+  <div id="reset-success-modal" class="modal-backdrop" role="dialog" aria-modal="true"
+    aria-labelledby="reset-success-title" aria-hidden="true">
+    <div class="modal-card modal-card-sm text-center login-success-card">
+      <div class="success-tick-container">
+        <svg class="success-tick-icon" viewBox="0 0 100 100" width="84" height="84" aria-hidden="true">
+          <defs>
+            <radialGradient id="resetTickGreenGloss" cx="42%" cy="30%" r="68%">
+              <stop offset="0%" stop-color="#6dde2b" />
+              <stop offset="35%" stop-color="#4fd322" />
+              <stop offset="70%" stop-color="#249c15" />
+              <stop offset="100%" stop-color="#12590d" />
+            </radialGradient>
+            <linearGradient id="resetTickGlossHighlight" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#ffffff" stop-opacity="0.32" />
+              <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+            </linearGradient>
+            <filter id="resetTickDropShadow" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#0f440a" flood-opacity="0.3" />
+            </filter>
+          </defs>
+
+          <!-- Outer Dark Green Rim -->
+          <circle cx="50" cy="50" r="48" fill="#17551a" />
+
+          <!-- Concentric Inner White Ring -->
+          <circle cx="50" cy="50" r="45.5" fill="none" stroke="#ffffff" stroke-width="1.3" stroke-opacity="0.9" />
+
+          <!-- Thin Dark Green Separation Ring -->
+          <circle cx="50" cy="50" r="44.2" fill="none" stroke="#134c16" stroke-width="1.2" />
+
+          <!-- Main Glossy Green Spherical Body -->
+          <circle cx="50" cy="50" r="43.2" fill="url(#resetTickGreenGloss)" filter="url(#resetTickDropShadow)" />
+
+          <!-- Top Specular Highlight Arc -->
+          <ellipse cx="50" cy="27" rx="32" ry="16" fill="url(#resetTickGlossHighlight)" />
+
+          <!-- Animated White Checkmark -->
+          <path class="tick-checkmark-path" d="M 26 53 L 43 70 L 78 35" fill="none" stroke="#ffffff" stroke-width="13"
+            stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="4" pathLength="100" />
+        </svg>
+      </div>
+      <h3 id="reset-success-title" class="modal-title modal-title-centered">Your password has been changed successfully.</h3>
+      <p class="modal-subtitle-centered">You can now sign in with your new password.</p>
+      <div class="modal-footer modal-footer-stacked mt-4">
+        <button type="button" class="btn-primary btn-block" id="btn-reset-go-to-login">
+          <span>Go to Login</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. History Screen / Modal (Requirement 6, 7, 8) -->
+  <div id="history-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="history-modal-title"
+    aria-hidden="true">
+    <div class="modal-card modal-card-lg">
+      <div class="modal-header">
+        <div class="brand-wrapper">
+          <img src="assets/icons/sheet.svg" alt="" width="22" height="22">
+          <h3 id="history-modal-title" class="modal-title">Conversion History</h3>
+        </div>
+        <button type="button" id="history-modal-close" class="modal-close-btn" aria-label="Close history dialog">
+          <img src="assets/icons/close.svg" alt="" width="18" height="18">
+        </button>
+      </div>
+      <div id="history-modal-content" class="modal-body history-content-area">
+        <!-- Injected dynamically by history.js based on auth state -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. Account Profile Modal -->
+  <div id="account-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="account-modal-title"
+    aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="account-modal-title" class="modal-title">My Account</h3>
+        <button type="button" class="modal-close-btn modal-close-trigger" aria-label="Close account dialog">
+          <img src="assets/icons/close.svg" alt="" width="18" height="18">
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="account-profile-box">
+          <div class="account-avatar-circle" id="account-avatar-circle" aria-hidden="true">
+            <img src="assets/icons/user.svg" alt="" width="28" height="28" id="account-avatar-icon">
+          </div>
+          <div class="account-profile-info">
+            <div class="account-name-badge-row">
+              <h4 id="account-user-name" class="account-user-name">User</h4>
+              <span id="account-provider-badge" class="account-provider-badge" style="display: none;">
+                <img src="assets/icons/google.svg" alt="" width="14" height="14">
+                <span>Google</span>
+              </span>
+            </div>
+            <p id="account-user-email" class="account-user-email">email@example.com</p>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer modal-footer-stacked">
+        <button type="button" class="btn-secondary btn-block" id="btn-account-logout">
+          <span aria-hidden="true">🚪</span>
+          <span>Sign Out</span>
+        </button>
+        <button type="button" class="btn-ghost btn-block modal-close-trigger">
+          <span>Close</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. Account Created Success Modal -->
+  <div id="signup-success-modal" class="modal-backdrop" role="dialog" aria-modal="true"
+    aria-labelledby="success-modal-title" aria-hidden="true">
+    <div class="modal-card modal-card-sm text-center">
+      <div class="success-logo-container">
+        <img src="assets/icons/logo.svg" alt="ScanSheet Logo" class="success-modal-logo" width="60" height="60">
+      </div>
+      <h3 id="success-modal-title" class="modal-title modal-title-centered">ScanSheet account has been created</h3>
+      <p class="modal-subtitle-centered" id="success-modal-desc">
+        Welcome to ScanSheet! Your account is ready to preserve and export your converted tables.
+      </p>
+      <div class="modal-footer modal-footer-stacked mt-4">
+        <button type="button" class="btn-primary btn-block" id="btn-success-continue">
+          <span>Continue</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. Login Success Modal with Animated Tick -->
+  <div id="login-success-modal" class="modal-backdrop" role="dialog" aria-modal="true"
+    aria-labelledby="login-success-title" aria-hidden="true">
+    <div class="modal-card modal-card-sm text-center login-success-card">
+      <div class="success-tick-container">
+        <svg class="success-tick-icon" viewBox="0 0 100 100" width="84" height="84" aria-hidden="true">
+          <defs>
+            <radialGradient id="tickGreenGloss" cx="42%" cy="30%" r="68%">
+              <stop offset="0%" stop-color="#6dde2b" />
+              <stop offset="35%" stop-color="#4fd322" />
+              <stop offset="70%" stop-color="#249c15" />
+              <stop offset="100%" stop-color="#12590d" />
+            </radialGradient>
+            <linearGradient id="tickGlossHighlight" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#ffffff" stop-opacity="0.32" />
+              <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+            </linearGradient>
+            <filter id="tickDropShadow" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#0f440a" flood-opacity="0.3" />
+            </filter>
+          </defs>
+
+          <!-- Outer Dark Green Rim -->
+          <circle cx="50" cy="50" r="48" fill="#17551a" />
+
+          <!-- Concentric Inner White Ring -->
+          <circle cx="50" cy="50" r="45.5" fill="none" stroke="#ffffff" stroke-width="1.3" stroke-opacity="0.9" />
+
+          <!-- Thin Dark Green Separation Ring -->
+          <circle cx="50" cy="50" r="44.2" fill="none" stroke="#134c16" stroke-width="1.2" />
+
+          <!-- Main Glossy Green Spherical Body -->
+          <circle cx="50" cy="50" r="43.2" fill="url(#tickGreenGloss)" filter="url(#tickDropShadow)" />
+
+          <!-- Top Specular Highlight Arc -->
+          <ellipse cx="50" cy="27" rx="32" ry="16" fill="url(#tickGlossHighlight)" />
+
+          <!-- Animated White Checkmark -->
+          <path class="tick-checkmark-path" d="M 26 53 L 43 70 L 78 35" fill="none" stroke="#ffffff" stroke-width="13"
+            stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="4" pathLength="100" />
+        </svg>
+      </div>
+      <h3 id="login-success-title" class="modal-title modal-title-centered">Login Successful</h3>
+      <p class="modal-subtitle-centered" id="login-success-subtitle">Welcome back!</p>
+      <div class="modal-footer modal-footer-stacked mt-4">
+        <button type="button" class="btn-primary btn-block" id="btn-login-success-continue">
+          <span>Continue</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. Image Cropping Interface Modal (Step 3.2: Crop Image) -->
+  <div id="crop-modal" class="modal-backdrop crop-backdrop" role="dialog" aria-modal="true"
+    aria-labelledby="crop-modal-title" aria-hidden="true">
+    <div class="modal-card modal-card-crop">
+      <div class="crop-modal-header">
+        <div class="crop-header-info">
+          <span class="preview-badge">Crop Tool</span>
+          <h3 id="crop-modal-title" class="crop-modal-heading">Crop Table Area</h3>
+        </div>
+        <button type="button" id="btn-crop-close" class="modal-close-btn" aria-label="Close crop editor">
+          <img src="assets/icons/close.svg" alt="" width="18" height="18">
+        </button>
+      </div>
+
+      <p class="crop-hint-text">Drag corners or edges to resize. Drag inside the box to reposition.</p>
+
+      <div class="crop-viewport" id="crop-viewport">
+        <div class="crop-stage" id="crop-stage">
+          <img id="crop-stage-image" src="" alt="Table to crop" class="crop-stage-image" draggable="false">
+          <div class="crop-box" id="crop-box" tabindex="0" role="region" aria-label="Crop selection rectangle">
+            <!-- Rule of thirds visual guides -->
+            <div class="crop-guide-h crop-guide-h1" aria-hidden="true"></div>
+            <div class="crop-guide-h crop-guide-h2" aria-hidden="true"></div>
+            <div class="crop-guide-v crop-guide-v1" aria-hidden="true"></div>
+            <div class="crop-guide-v crop-guide-v2" aria-hidden="true"></div>
+
+            <!-- Touch-friendly Corner & Edge Resize Handles -->
+            <div class="crop-handle handle-nw" data-handle="nw" aria-label="Top-left handle"></div>
+            <div class="crop-handle handle-ne" data-handle="ne" aria-label="Top-right handle"></div>
+            <div class="crop-handle handle-sw" data-handle="sw" aria-label="Bottom-left handle"></div>
+            <div class="crop-handle handle-se" data-handle="se" aria-label="Bottom-right handle"></div>
+            <div class="crop-handle handle-n" data-handle="n" aria-label="Top edge handle"></div>
+            <div class="crop-handle handle-s" data-handle="s" aria-label="Bottom edge handle"></div>
+            <div class="crop-handle handle-w" data-handle="w" aria-label="Left edge handle"></div>
+            <div class="crop-handle handle-e" data-handle="e" aria-label="Right edge handle"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="crop-modal-footer">
+        <button type="button" class="btn-secondary" id="btn-crop-reset" aria-label="Reset crop area to full image">
+          <span>Reset</span>
+        </button>
+        <button type="button" class="btn-ghost" id="btn-crop-cancel" aria-label="Cancel crop and return to preview">
+          <span>Cancel</span>
+        </button>
+        <button type="button" class="btn-primary" id="btn-crop-apply" aria-label="Apply crop selection">
+          <span>Apply Crop</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+
+  <!-- 8. Multi-Format Export Modal Dialog -->
+  <div id="multi-export-modal" class="modal-backdrop" role="dialog" aria-modal="true"
+    aria-labelledby="multi-export-modal-title" aria-hidden="true">
+    <div class="modal-card modal-card-export">
+      <div class="modal-header">
+        <div class="brand-wrapper">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#7c3aed" stroke-width="2">
+            <path
+              d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
+            </path>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+          </svg>
+          <h3 id="multi-export-modal-title" class="modal-title">Export Multiple Files</h3>
+        </div>
+        <button type="button" id="btn-close-multi-export" class="modal-close-btn" aria-label="Close export dialog">
+          <img src="assets/icons/close.svg" alt="" width="18" height="18">
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Status Banner when a document is scanned -->
+        <div class="multi-export-doc-info" id="multi-export-doc-info" style="display: none;">
+          <span class="doc-info-badge">Target Document:</span>
+          <span class="doc-info-title" id="multi-export-doc-title">ScanSheet Table</span>
+        </div>
+
+        <p class="modal-body-subtext">Select the formats you wish to export:</p>
+
+        <div class="multi-format-options-list">
+          <label class="multi-format-option">
+            <input type="checkbox" id="chk-export-excel" value="excel" checked class="form-checkbox">
+            <div class="multi-format-label-content">
+              <span class="multi-format-name">Microsoft Excel Spreadsheet (.xlsx)</span>
+              <span class="multi-format-filename">ScanSheet_Converted_Table.xlsx</span>
+            </div>
+          </label>
+
+          <label class="multi-format-option">
+            <input type="checkbox" id="chk-export-word" value="word" checked class="form-checkbox">
+            <div class="multi-format-label-content">
+              <span class="multi-format-name">Microsoft Word Document (.docx)</span>
+              <span class="multi-format-filename">ScanSheet_Converted_Document.docx</span>
+            </div>
+          </label>
+
+          <label class="multi-format-option">
+            <input type="checkbox" id="chk-export-pdf" value="pdf" checked class="form-checkbox">
+            <div class="multi-format-label-content">
+              <span class="multi-format-name">PDF Document (.pdf)</span>
+              <span class="multi-format-filename">ScanSheet_Converted_Document.pdf</span>
+            </div>
+          </label>
+
+          <label class="multi-format-option">
+            <input type="checkbox" id="chk-export-image" value="image" checked class="form-checkbox">
+            <div class="multi-format-label-content">
+              <span class="multi-format-name">High-Resolution Image (.png)</span>
+              <span class="multi-format-filename">ScanSheet_Converted_Image.png</span>
+            </div>
+          </label>
+        </div>
+
+        <div class="bundle-delivery-mode">
+          <label class="delivery-radio-option">
+            <input type="radio" name="export-delivery" value="zip" id="radio-delivery-zip" checked>
+            <span>Download as ZIP Bundle (ScanSheet_Exports_Bundle.zip)</span>
+          </label>
+          <label class="delivery-radio-option">
+            <input type="radio" name="export-delivery" value="individual" id="radio-delivery-indiv">
+            <span>Download Selected Files Individually</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn-ghost" id="btn-cancel-multi-export">
+          <span>Cancel</span>
+        </button>
+        <button type="button" class="btn-primary" id="btn-confirm-multi-export">
+          <span>Download Selected Files</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+
+  <!-- Toast Feedback Component -->
+  <aside id="status-toast" class="toast-container" role="status" aria-live="polite" aria-hidden="true">
+    <img src="assets/icons/info.svg" alt="" class="toast-icon" width="18" height="18" aria-hidden="true">
+    <span id="status-toast-message" class="toast-message"></span>
+    <button type="button" id="status-toast-close" class="toast-close-btn"
+      aria-label="Close notification">&times;</button>
+  </aside>
+
+  <!-- Multi-Format Export Libraries -->
+  <script src="js/vendor/jszip.min.js"></script>
+  <script src="js/vendor/xlsx.full.min.js"></script>
+  <script src="js/vendor/docx.umd.js"></script>
+  <script src="js/vendor/jspdf.umd.min.js"></script>
+  <script src="js/vendor/jspdf.plugin.autotable.min.js"></script>
+
+  <!-- OCR Engine Library -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+  <!-- Supabase Client Library (Persistent Auth & PostgreSQL) -->
+  <script src="js/vendor/supabase.min.js"></script>
+
+  <!-- Application Logic -->
+  <script type="module" src="js/app.js?v=6.5"></script>
+</body>
+
+</html>

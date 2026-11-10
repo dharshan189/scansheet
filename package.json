@@ -1,0 +1,11 @@
+{
+  "name": "scansheet",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "ScanSheet - OCR Document & Table Recognition Web Application",
+  "scripts": {
+    "dev": "python ocr_server.py"
+  }
+}
+
