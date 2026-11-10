@@ -8,6 +8,6 @@ __pycache__/
 supabase/
 ocr_server.py
 ocr_pipeline.py
-requirements.txt
+ocr-requirements.txt
 README.md
 
