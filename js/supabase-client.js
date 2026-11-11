@@ -11,75 +11,92 @@ class SupabaseService {
       url: null,
       anonKey: null
     };
+    this.initError = null;
     this.initPromise = null;
   }
 
   /**
    * Initialize Supabase client
-   * Resolves credentials from /api/config, window.__ENV__, or localStorage overrides
+   * Resolves public credentials strictly from /api/config (or server-injected window.__ENV__).
+   * Never loads or trusts auth project configuration from localStorage.
    */
   async init() {
     if (this.initPromise) return this.initPromise;
 
     this.initPromise = (async () => {
       try {
-        // 1. Check window.__ENV__ or global overrides
-        let url = window.__ENV__?.SUPABASE_URL || window.SUPABASE_URL || null;
-        let anonKey = window.__ENV__?.SUPABASE_ANON_KEY || window.SUPABASE_ANON_KEY || null;
+        this.initError = null;
 
-        // 2. Fetch from backend /api/config if not defined in window
+        // 1. Optional server-injected environment overrides
+        let url = (window.__ENV__?.SUPABASE_URL || '').trim() || null;
+        let anonKey = (window.__ENV__?.SUPABASE_ANON_KEY || '').trim() || null;
+
+        // 2. Fetch public runtime config from backend /api/config
         if (!url || !anonKey) {
           try {
             const resp = await fetch('/api/config', { cache: 'no-store' });
-            if (resp.ok) {
+            const contentType = resp.headers.get('content-type') || '';
+            if (resp.ok && contentType.includes('application/json')) {
               const data = await resp.json();
-              url = data.supabaseUrl || url;
-              anonKey = data.supabaseAnonKey || anonKey;
+              url = (data.supabaseUrl || '').trim() || url;
+              anonKey = (data.supabaseAnonKey || '').trim() || anonKey;
               if (data.ocrServerUrl && !window.PADDLE_OCR_API_URL) {
-                const trimmed = data.ocrServerUrl.replace(/\/+$/, '');
+                const trimmed = data.ocrServerUrl.trim().replace(/\/+$/, '');
                 window.PADDLE_OCR_API_URL = trimmed.endsWith('/api/scan') ? trimmed : `${trimmed}/api/scan`;
               }
+            } else {
+              this.initError = `Config endpoint /api/config returned status ${resp.status}.`;
             }
           } catch (netErr) {
-            // Backend config not reachable (e.g. static host without serverless function)
+            this.initError = 'Could not reach backend /api/config endpoint.';
           }
         }
 
-        // 3. Check for developer localStorage configuration fallback
         if (!url || !anonKey) {
-          try {
-            const localCfg = localStorage.getItem('scansheet_supabase_config');
-            if (localCfg) {
-              const parsed = JSON.parse(localCfg);
-              url = parsed.url || url;
-              anonKey = parsed.anonKey || anonKey;
-            }
-          } catch (_) {}
+          this.initError = this.initError ||
+            'Supabase public environment variables (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) are not set on the server.';
+          console.warn('[Supabase]', this.initError);
+          return null;
         }
 
-        if (url && anonKey && typeof window !== 'undefined' && window.supabase?.createClient) {
-          this.config = { url, anonKey };
-          this.client = window.supabase.createClient(url, anonKey, {
-            auth: {
-              persistSession: true,
-              autoRefreshToken: true,
-              detectSessionInUrl: true,
-              storage: window.localStorage
-            }
-          });
-          console.log('[Supabase] Initialized successfully with persistent session management.');
-        } else {
-          if (!url || !anonKey) {
-            console.info('[Supabase] Environment credentials not set. Running in local/offline fallback mode.');
-          }
+        if (typeof window === 'undefined' || !window.supabase?.createClient) {
+          this.initError = 'Supabase SDK library failed to load.';
+          console.error('[Supabase]', this.initError);
+          return null;
         }
+
+        this.config = { url, anonKey };
+        this.client = window.supabase.createClient(url, anonKey, {
+          auth: {
+            persistSession: true,
+            autoRefreshToken: true,
+            detectSessionInUrl: true,
+            storage: window.localStorage
+          }
+        });
+        console.log('[Supabase] Initialized successfully with persistent session management.');
       } catch (err) {
+        this.initError = err?.message || 'Supabase initialization failed.';
         console.warn('[Supabase] Initialization error:', err);
       }
       return this.client;
     })();
 
     return this.initPromise;
+  }
+
+  /**
+   * Return sanitized public Supabase config (URL + public key)
+   */
+  getConfig() {
+    return { ...this.config };
+  }
+
+  /**
+   * Return human-readable non-secret error if initialization failed
+   */
+  getInitError() {
+    return this.initError;
   }
 
   /**

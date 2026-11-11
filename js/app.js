@@ -20,6 +20,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   History.init();
   Scanner.init();
 
+  // Resume pending upload/camera action if user just returned from OAuth redirect
+  if (Auth.isAuthenticated()) {
+    const postAuthAction = Auth.consumeIntendedAction();
+    if (postAuthAction === 'upload') {
+      setTimeout(() => Upload.openPicker(), 150);
+    } else if (postAuthAction === 'camera') {
+      setTimeout(() => Upload.openCamera(), 150);
+    }
+  }
+
   // Pre-warm OCR worker in idle time so scans execute instantly
   if (window.requestIdleCallback) {
     window.requestIdleCallback(() => Scanner.preloadTesseract(), { timeout: 3000 });
@@ -183,73 +193,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // --------------------------------------------------------------------------
-  // GOOGLE AUTHENTICATION PROCESS ("Continue with Google")
+  // GOOGLE AUTHENTICATION PROCESS ("Continue with Google" via Supabase Auth)
   // --------------------------------------------------------------------------
-  let googleTokenClient = null;
-
   function initGoogleIdentity() {
-    if (window.google?.accounts?.oauth2 && Auth.GOOGLE_CLIENT_ID) {
-      try {
-        googleTokenClient = google.accounts.oauth2.initTokenClient({
-          client_id: Auth.GOOGLE_CLIENT_ID,
-          scope: 'email profile openid',
-          callback: async (tokenResponse) => {
-            if (tokenResponse && tokenResponse.access_token) {
-              try {
-                // Fetch profile info from Google's UserInfo endpoint
-                const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                  headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
-                });
-                const profile = await res.json();
-                if (profile && profile.email) {
-                  await processSuccessfulGoogleLogin({
-                    name: profile.name || profile.given_name,
-                    email: profile.email,
-                    picture: profile.picture
-                  });
-                } else {
-                  UI.showNotification('Could not retrieve Google profile details.');
-                }
-              } catch (err) {
-                console.error('Error fetching Google userinfo:', err);
-                UI.showNotification('Failed to retrieve Google profile information.');
-              }
-            } else if (tokenResponse?.error) {
-              console.warn('Google Auth Error:', tokenResponse.error);
-              if (tokenResponse.error !== 'popup_closed_by_user') {
-                UI.showNotification(`Google sign-in error: ${tokenResponse.error}`);
-              }
-            }
-          },
-          error_callback: (err) => {
-            console.error('Google TokenClient error:', err);
-            if (err?.type === 'popup_failed_to_open') {
-              UI.showNotification('Google sign-in popup was blocked. Please allow popups.');
-            } else if (err?.message) {
-              UI.showNotification(`Google Sign-In: ${err.message}`);
-            }
-          }
-        });
-      } catch (err) {
-        console.warn('Could not initialize Google token client:', err);
-      }
-    }
-
-    // Also initialize Google One Tap / ID Token
+    // Initialize optional Google One Tap / ID Token flow routed through Supabase signInWithIdToken
     if (window.google?.accounts?.id && Auth.GOOGLE_CLIENT_ID) {
       try {
         google.accounts.id.initialize({
           client_id: Auth.GOOGLE_CLIENT_ID,
           callback: async (response) => {
             if (response?.credential) {
-              const decoded = Auth.decodeJwt(response.credential);
-              if (decoded && decoded.email) {
-                await processSuccessfulGoogleLogin({
-                  name: decoded.name || decoded.given_name,
-                  email: decoded.email,
-                  picture: decoded.picture
-                });
-              }
+              await processSuccessfulGoogleLogin(response.credential);
             }
           }
         });
@@ -257,11 +211,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.warn('Google accounts.id initialize error:', e);
       }
     }
-
-    return googleTokenClient;
   }
 
-  // Attempt Google Identity initialization when script is loaded
+  // Attempt Google One Tap initialization when script is loaded
   if (window.google?.accounts) {
     initGoogleIdentity();
   } else {
@@ -270,8 +222,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  async function processSuccessfulGoogleLogin(selectedAccount) {
-    const result = await Auth.loginWithGoogle(selectedAccount);
+  async function processSuccessfulGoogleLogin(idToken) {
+    const result = await Auth.loginWithGoogle({ idToken });
 
     if (!result.success) {
       UI.showNotification(result.error || 'Google authentication failed.');
@@ -300,28 +252,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   async function handleGoogleAuthRequest() {
-    // Ensure client is initialized
-    let client = googleTokenClient || initGoogleIdentity();
-
-    if (!client && !window.google?.accounts?.oauth2) {
-      UI.showNotification('Loading Google authentication...');
-      let attempts = 0;
-      while (!window.google?.accounts?.oauth2 && attempts < 10) {
-        await new Promise(r => setTimeout(r, 200));
-        attempts++;
-      }
-      client = initGoogleIdentity();
-    }
-
-    if (client) {
-      try {
-        client.requestAccessToken({ prompt: 'select_account' });
-      } catch (e) {
-        console.error('Failed to open Google sign-in window:', e);
-        UI.showNotification('Unable to open Google sign-in popup. Please allow popups.');
-      }
-    } else {
-      UI.showNotification('Google Sign-In is initializing. Please try again in a moment.');
+    UI.showNotification('Connecting to Google Sign-In...');
+    const result = await Auth.loginWithGoogle();
+    if (!result.success) {
+      UI.showNotification(result.error || 'Google authentication failed.');
     }
   }
 
@@ -614,7 +548,13 @@ document.addEventListener('DOMContentLoaded', async () => {
           return;
         }
 
-        // Open Recovery Verification Modal (Step 2: Verify Registered Email)
+        if (result.mode === 'supabase_link') {
+          UI.closeAllModals();
+          UI.showNotification(`Password reset link sent to ${result.email}. Please check your email inbox.`);
+          return;
+        }
+
+        // Fallback recovery verification modal if OTP flow returned
         UI.openRecoveryVerifyModal(result.email, result.expiresAt);
         UI.showNotification(`If registered, a recovery code has been sent to ${result.email}`);
       } catch (err) {
@@ -823,7 +763,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // Handle recovery link from email / external redirect if present
+  // Handle Supabase password recovery events & redirect tokens
+  Auth.onPasswordRecovery(() => {
+    UI.openResetPasswordModal();
+  });
+
   try {
     const urlParams = new URLSearchParams(window.location.search);
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
@@ -842,6 +786,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Account Modal Logout
   if (btnLogoutAccount) {
     btnLogoutAccount.addEventListener('click', () => {
+      closeAdminDashboard();
       Auth.logout();
       Upload.reset();
       UI.closeAllModals();
@@ -852,44 +797,175 @@ document.addEventListener('DOMContentLoaded', async () => {
   // --------------------------------------------------------------------------
   // 4. HEADER NAVIGATION & AUTH STATE SYNC (Requirement 8 & 10)
   // --------------------------------------------------------------------------
+  let cachedAdminTotalUsers = 0;
+  let cachedAdminUsers = [];
+  let cachedAdminStats = { totalProjects: 0, dailyUploads: 0, filesGenerated: 0 };
+  let adminUserFilterTerm = '';
+  let isAdminDashboardOpen = false;
+  let adminRefreshSeq = 0;
+  let adminRealtimeDebounceTimer = null;
+
   Auth.onAuthStateChanged((user) => {
     updateNavigation(user);
     updateDashboardView(user);
   });
 
-  let cachedAdminUsers = [];
-  let cachedAdminStats = { totalProjects: 0, dailyUploads: 0, filesGenerated: 0 };
-  let adminUserFilterTerm = '';
+  function updateAdminRealtimeBadge(status) {
+    const badge = Utils.qs('#admin-realtime-status');
+    if (!badge) return;
+    if (!isAdminDashboardOpen) {
+      badge.style.display = 'none';
+      return;
+    }
+    badge.style.display = 'inline-flex';
+    badge.classList.remove('live', 'warning');
 
-  function updateDashboardView(user) {
-    const userDashboard = Utils.qs('#user-dashboard');
-    const adminDashboard = Utils.qs('#admin-dashboard');
+    if (status === 'SUBSCRIBED') {
+      badge.classList.add('live');
+      badge.textContent = 'Live Sync';
+    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+      badge.classList.add('warning');
+      badge.textContent = 'Reconnecting...';
+    } else if (status === 'UNAVAILABLE') {
+      badge.classList.add('warning');
+      badge.textContent = 'Sync Offline';
+    } else {
+      badge.textContent = 'Connecting...';
+    }
+  }
 
-    if (user && user.role === 'admin') {
-      if (userDashboard) userDashboard.style.display = 'none';
-      if (adminDashboard) {
-        adminDashboard.style.display = 'block';
+  function scheduleAdminRefresh(delayMs = 150) {
+    if (!isAdminDashboardOpen) return;
+    if (adminRealtimeDebounceTimer) {
+      clearTimeout(adminRealtimeDebounceTimer);
+    }
+    adminRealtimeDebounceTimer = setTimeout(() => {
+      adminRealtimeDebounceTimer = null;
+      if (isAdminDashboardOpen) {
         refreshAdminDashboard();
       }
+    }, delayMs);
+  }
+
+  function handleAdminOnline() {
+    if (!isAdminDashboardOpen) return;
+    Auth.ensureAdminRealtimeConnected();
+    scheduleAdminRefresh(50);
+  }
+
+  function handleAdminVisibilityChange() {
+    if (!isAdminDashboardOpen || document.visibilityState !== 'visible') return;
+    Auth.ensureAdminRealtimeConnected();
+    scheduleAdminRefresh(50);
+  }
+
+  function handleAdminUnmount() {
+    if (isAdminDashboardOpen) {
+      closeAdminDashboard();
+    }
+  }
+
+  function attachAdminLifecycleListeners() {
+    window.addEventListener('online', handleAdminOnline);
+    document.addEventListener('visibilitychange', handleAdminVisibilityChange);
+    window.addEventListener('pagehide', handleAdminUnmount);
+    window.addEventListener('beforeunload', handleAdminUnmount);
+  }
+
+  function detachAdminLifecycleListeners() {
+    window.removeEventListener('online', handleAdminOnline);
+    document.removeEventListener('visibilitychange', handleAdminVisibilityChange);
+    window.removeEventListener('pagehide', handleAdminUnmount);
+    window.removeEventListener('beforeunload', handleAdminUnmount);
+  }
+
+  function openAdminDashboard() {
+    const userDashboard = Utils.qs('#user-dashboard');
+    const adminDashboard = Utils.qs('#admin-dashboard');
+    if (userDashboard) userDashboard.style.display = 'none';
+    if (adminDashboard) adminDashboard.style.display = 'block';
+
+    if (isAdminDashboardOpen) {
+      Auth.ensureAdminRealtimeConnected();
+      return;
+    }
+
+    isAdminDashboardOpen = true;
+    attachAdminLifecycleListeners();
+    updateAdminRealtimeBadge('CONNECTING');
+    refreshAdminDashboard();
+
+    Auth.startAdminRealtime({
+      onDataChanged: (evt) => {
+        if (!isAdminDashboardOpen) return;
+        const delay = evt?.reason === 'reconnected' ? 50 : 180;
+        scheduleAdminRefresh(delay);
+      },
+      onStatusChange: (status) => {
+        if (!isAdminDashboardOpen) return;
+        updateAdminRealtimeBadge(status);
+      }
+    });
+  }
+
+  function closeAdminDashboard() {
+    isAdminDashboardOpen = false;
+    adminRefreshSeq++;
+    if (adminRealtimeDebounceTimer) {
+      clearTimeout(adminRealtimeDebounceTimer);
+      adminRealtimeDebounceTimer = null;
+    }
+    detachAdminLifecycleListeners();
+    Auth.stopAdminRealtime();
+
+    cachedAdminTotalUsers = 0;
+    cachedAdminUsers = [];
+    cachedAdminStats = { totalProjects: 0, dailyUploads: 0, filesGenerated: 0 };
+
+    const userDashboard = Utils.qs('#user-dashboard');
+    const adminDashboard = Utils.qs('#admin-dashboard');
+    const badge = Utils.qs('#admin-realtime-status');
+    if (badge) badge.style.display = 'none';
+    if (adminDashboard) adminDashboard.style.display = 'none';
+    if (userDashboard) userDashboard.style.display = 'block';
+  }
+
+  function updateDashboardView(user) {
+    if (user && user.role === 'admin') {
+      openAdminDashboard();
     } else {
-      if (userDashboard) userDashboard.style.display = 'block';
-      if (adminDashboard) adminDashboard.style.display = 'none';
+      closeAdminDashboard();
     }
   }
 
   async function refreshAdminDashboard() {
-    const [users, stats] = await Promise.all([
-      Auth.fetchRegisteredUsers(),
-      Auth.fetchAdminStats()
-    ]);
-    cachedAdminUsers = users || [];
-    cachedAdminStats = stats || { totalProjects: 0, dailyUploads: 0, filesGenerated: 0 };
+    if (!isAdminDashboardOpen) return false;
+    const seq = ++adminRefreshSeq;
+    const overview = await Auth.fetchAdminOverview();
+    if (!isAdminDashboardOpen || seq !== adminRefreshSeq) {
+      return false;
+    }
+
+    if (!overview.success) {
+      if (!overview.authorized) {
+        closeAdminDashboard();
+      }
+      if (overview.error) {
+        UI.showNotification(overview.error);
+      }
+      return false;
+    }
+
+    cachedAdminTotalUsers = overview.totalUsers;
+    cachedAdminUsers = overview.users || [];
+    cachedAdminStats = overview.stats || { totalProjects: 0, dailyUploads: 0, filesGenerated: 0 };
     updateAdminStats();
     renderAdminUsersTable();
+    return true;
   }
 
   function updateAdminStats() {
-    const userCount = cachedAdminUsers.length || Auth.getUsersCount();
+    const userCount = cachedAdminTotalUsers;
     const totalUsersEl = Utils.qs('#stat-total-users');
     if (totalUsersEl) totalUsersEl.textContent = userCount;
 
@@ -915,7 +991,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     updateAdminStats();
 
-    const allUsers = cachedAdminUsers.length > 0 ? cachedAdminUsers : Auth.getRegisteredUsers();
+    const allUsers = cachedAdminUsers;
     const query = adminUserFilterTerm.trim().toLowerCase();
 
     const filteredUsers = query
@@ -1030,8 +1106,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnAdminRefresh = Utils.qs('#btn-admin-refresh-users');
   if (btnAdminRefresh) {
     btnAdminRefresh.addEventListener('click', async () => {
-      await refreshAdminDashboard();
-      UI.showNotification('Registered users list refreshed from database.');
+      const ok = await refreshAdminDashboard();
+      if (ok) {
+        UI.showNotification('Registered users list refreshed from database.');
+      }
     });
   }
 
@@ -1043,9 +1121,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   async function exportUsersToCsv() {
-    const users = cachedAdminUsers.length > 0
-      ? cachedAdminUsers
-      : await Auth.fetchRegisteredUsers();
+    let users = cachedAdminUsers;
+    if (users.length === 0) {
+      try {
+        users = await Auth.fetchRegisteredUsers();
+      } catch (err) {
+        UI.showNotification(err?.message || 'Unable to export registered users.');
+        return;
+      }
+    }
     if (users.length === 0) {
       UI.showNotification('No registered users to export.');
       return;
@@ -1056,7 +1140,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       `"${(u.id || '').replace(/"/g, '""')}"`,
       `"${(u.name || '').replace(/"/g, '""')}"`,
       `"${(u.email || '').replace(/"/g, '""')}"`,
-      `"${(u.authProvider || 'local').replace(/"/g, '""')}"`,
+      `"${(u.authProvider || 'email').replace(/"/g, '""')}"`,
       `"${(u.role || 'user').replace(/"/g, '""')}"`,
       `"${(u.createdAt || '').replace(/"/g, '""')}"`
     ]);
@@ -1073,13 +1157,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     URL.revokeObjectURL(url);
     UI.showNotification(`Exported ${users.length} registered users to CSV.`);
   }
-
-  // Real-time cross-tab sync for Admin statistics & users table
-  window.addEventListener('storage', (e) => {
-    if (e.key === Auth.STORAGE_USERS_KEY) {
-      refreshAdminDashboard();
-    }
-  });
 
   function updateNavigation(user) {
     const navContainers = Utils.qsa('.nav-links-list');
@@ -1198,6 +1275,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
         UI.toggleMobileDrawer(false);
+        closeAdminDashboard();
         Auth.logout();
         Upload.reset();
         UI.showNotification('You have logged out.');

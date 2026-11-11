@@ -127,6 +127,8 @@ export const History = {
 
         if (!error && data) {
           record.id = data.id;
+        } else if (error) {
+          console.warn('[History] Supabase insert notice:', error.message);
         }
       } catch (err) {
         console.warn('[History] Supabase addRecord error:', err);

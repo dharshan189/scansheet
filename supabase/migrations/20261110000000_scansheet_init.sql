@@ -292,3 +292,35 @@ create policy "Users can delete own storage files"
   on storage.objects for delete
   to authenticated
   using (bucket_id in ('scansheet-uploads', 'scansheet-exports') and (storage.foldername(name))[1] = (select auth.uid())::text);
+
+-- ============================================================================
+-- 6. SUPABASE REALTIME PUBLICATION (ADMIN LIVE USER & METRICS SYNC)
+-- Respects RLS policies: only admins matching is_admin() receive all rows.
+-- ============================================================================
+alter table public.profiles replica identity full;
+alter table public.conversion_history replica identity full;
+
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    if not exists (
+      select 1
+      from pg_publication_tables
+      where pubname = 'supabase_realtime'
+        and schemaname = 'public'
+        and tablename = 'profiles'
+    ) then
+      execute 'alter publication supabase_realtime add table public.profiles';
+    end if;
+
+    if not exists (
+      select 1
+      from pg_publication_tables
+      where pubname = 'supabase_realtime'
+        and schemaname = 'public'
+        and tablename = 'conversion_history'
+    ) then
+      execute 'alter publication supabase_realtime add table public.conversion_history';
+    end if;
+  end if;
+end $$;

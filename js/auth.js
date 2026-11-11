@@ -1,7 +1,7 @@
 /**
  * ScanSheet - Authentication Architecture & Gate Controller
  * Step 2: Auth State, Intended Action Session & Validation
- * Connects to Supabase Auth & PostgreSQL with persistent sessions.
+ * Connects exclusively to Supabase Auth & PostgreSQL with server-verified sessions and roles.
  */
 
 import { SupabaseConfig } from './supabase-client.js';
@@ -15,15 +15,19 @@ export const Auth = {
 
   // Holds the action the user was attempting before the login gate was triggered (e.g. 'upload')
   intendedAction: null,
+  INTENDED_ACTION_KEY: 'scansheet_intended_action',
 
   // Registered listeners for auth state transitions
   listeners: [],
 
-  STORAGE_USERS_KEY: 'scansheet_registered_users',
-  STORAGE_SESSION_KEY: 'scansheet_active_session',
+  // Listeners for Supabase password recovery link events
+  recoveryListeners: [],
+
+  ADMIN_USERNAME: 'ss@2718',
+
   GOOGLE_CLIENT_ID: '667093541029-m5nejkck6smbhlh657ddrlobpl1sa6em.apps.googleusercontent.com',
 
-  // EmailJS Integration Settings
+  // EmailJS Integration Settings (Signup Email OTP pre-verification)
   EMAILJS_CONFIG: {
     SERVICE_ID: 'service_d3n4rm3',
     TEMPLATE_ID: 'template_iczl86x',
@@ -31,18 +35,33 @@ export const Auth = {
     OTP_VALIDITY_SECONDS: 110 // 1 minute 50 seconds (110s)
   },
 
-  // Holds pending registration data awaiting OTP verification
+  // Holds pending registration data awaiting OTP verification (in memory only)
   pendingRegistration: null,
 
-  // Holds pending password recovery data awaiting OTP verification
-  pendingPasswordRecovery: null,
+  // Admin Supabase Realtime channel & reconnect lifecycle state
+  _adminRealtimeChannel: null,
+  _adminRealtimeWanted: false,
+  _adminRealtimeConnecting: false,
+  _adminRealtimeReconnectTimer: null,
+  _adminRealtimeRetryAttempt: 0,
+  _adminRealtimeHasSubscribedOnce: false,
+  _adminRealtimeNeedsResync: false,
+  _adminRealtimeCallbacks: null,
 
-  // Holds active, verified password recovery session
-  recoverySession: null,
+  /**
+   * Returns a safe user-facing error message when Supabase client is unavailable
+   * @returns {string}
+   */
+  getCloudUnavailableMessage() {
+    return (
+      SupabaseConfig.getInitError() ||
+      'Cloud authentication is unavailable because Supabase environment variables are not configured.'
+    );
+  },
 
   /**
    * Helper to decode JWT ID token from Google Identity Services
-   * @param {string} token 
+   * @param {string} token
    * @returns {Object|null}
    */
   decodeJwt(token) {
@@ -60,7 +79,9 @@ export const Auth = {
   },
 
   /**
-   * Helper to map Supabase User entity to ScanSheet user model
+   * Helper to map Supabase User entity to ScanSheet user model.
+   * Never reads role from mutable user_metadata; role starts as 'user' and is
+   * resolved solely from public.profiles on the server.
    * @param {Object} user
    * @returns {Object|null}
    */
@@ -71,114 +92,53 @@ export const Auth = {
       id: user.id,
       name: meta.full_name || meta.name || (user.email ? user.email.split('@')[0] : 'User'),
       email: user.email || '',
-      role: meta.role || 'user',
+      role: 'user',
       picture: meta.avatar_url || meta.picture || null,
-      authProvider: user.app_metadata?.provider || 'supabase',
+      authProvider: user.app_metadata?.provider || 'email',
       createdAt: user.created_at || new Date().toISOString()
     };
   },
 
   /**
-   * Asynchronously synchronize profile data from public.profiles table
+   * Synchronize authoritative user profile and role from public.profiles table
    * @param {string} userId
+   * @param {Object} [targetUser]
+   * @returns {Promise<Object|null>}
    */
-  async syncProfileWithDatabase(userId) {
-    if (!this.supabase || !userId) return;
+  async syncProfileWithDatabase(userId, targetUser = null) {
+    if (!this.supabase || !userId) return null;
     try {
-      const { data: profile } = await this.supabase
+      const { data: profile, error } = await this.supabase
         .from('profiles')
-        .select('*')
+        .select('id, email, name, picture, role, auth_provider, created_at')
         .eq('id', userId)
         .maybeSingle();
 
-      if (profile && this.currentUser && this.currentUser.id === userId) {
-        let changed = false;
-        if (profile.name && this.currentUser.name !== profile.name) {
-          this.currentUser.name = profile.name;
-          changed = true;
-        }
-        if (profile.role && this.currentUser.role !== profile.role) {
-          this.currentUser.role = profile.role;
-          changed = true;
-        }
-        if (profile.picture && this.currentUser.picture !== profile.picture) {
-          this.currentUser.picture = profile.picture;
-          changed = true;
-        }
-        if (changed) {
-          this.saveSession(this.currentUser);
-          this.notifyListeners();
-        }
+      if (error) {
+        console.warn('[Auth] Profile sync notice:', error.message);
+        return null;
       }
-    } catch (_) {}
+
+      const target = targetUser || (this.currentUser && this.currentUser.id === userId ? this.currentUser : null);
+      if (profile && target && target.id === userId) {
+        target.role = profile.role === 'admin' ? 'admin' : 'user';
+        if (profile.name) target.name = profile.name;
+        if (profile.picture) target.picture = profile.picture;
+        if (profile.auth_provider) target.authProvider = profile.auth_provider;
+        if (profile.created_at) target.createdAt = profile.created_at;
+      }
+      return profile || null;
+    } catch (err) {
+      console.warn('[Auth] Profile sync error:', err?.message || err);
+      return null;
+    }
   },
 
   /**
-   * Initialize authentication system and restore active session if available
+   * Initialize authentication system and restore verified Supabase session if active
    */
   async init() {
     try {
-      // 1. Initial check: restore local session immediately to avoid UI flickers
-      const saved = localStorage.getItem(this.STORAGE_SESSION_KEY);
-      if (saved) {
-        try {
-          this.currentUser = JSON.parse(saved);
-        } catch (_) {}
-      }
-
-      // 2. Connect to Supabase Auth & PostgreSQL
-      const client = await SupabaseConfig.init();
-      if (client) {
-        this.supabase = client;
-        try {
-          const { data: { session }, error } = await this.supabase.auth.getSession();
-          if (error) {
-            console.warn('[Auth] Persistent session restoration note:', error);
-            // Invalidate state if refresh failed
-            this.currentUser = null;
-            this.saveSession(null);
-            this.notifyListeners();
-          } else if (session?.user) {
-            this.currentUser = this.mapSupabaseUser(session.user);
-            await this.syncProfileWithDatabase(session.user.id);
-            this.saveSession(this.currentUser);
-            this.notifyListeners();
-          } else if (this.currentUser && this.currentUser.authProvider === 'supabase') {
-            // No active Supabase session
-            this.currentUser = null;
-            this.saveSession(null);
-            this.notifyListeners();
-          }
-
-          // 3. Register native Supabase auth state change subscription
-          this.supabase.auth.onAuthStateChange(async (event, session) => {
-            if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-              if (session?.user) {
-                this.currentUser = this.mapSupabaseUser(session.user);
-                await this.syncProfileWithDatabase(session.user.id);
-                this.saveSession(this.currentUser);
-                this.notifyListeners();
-              }
-            } else if (event === 'SIGNED_OUT') {
-              this.currentUser = null;
-              this.saveSession(null);
-              this.notifyListeners();
-            }
-          });
-        } catch (sbErr) {
-          console.warn('[Auth] Supabase getSession notice:', sbErr);
-        }
-      }
-
-      // Ensure registered users storage key exists as an empty array
-      if (!localStorage.getItem(this.STORAGE_USERS_KEY)) {
-        localStorage.setItem(this.STORAGE_USERS_KEY, JSON.stringify([]));
-      }
-      // Guarantee current user is saved to STORAGE_USERS_KEY
-      if (this.currentUser && this.currentUser.email && this.currentUser.role !== 'admin') {
-        this.saveUser(this.currentUser);
-      }
-
       // Initialize EmailJS SDK if available
       if (window.emailjs && typeof window.emailjs.init === 'function') {
         try {
@@ -187,34 +147,102 @@ export const Auth = {
           console.warn('EmailJS SDK initialization notice:', ejErr);
         }
       }
+
+      // Connect to Supabase Auth & PostgreSQL via backend /api/config
+      const client = await SupabaseConfig.init();
+      if (!client) {
+        this.supabase = null;
+        this.currentUser = null;
+        this.notifyListeners();
+        return null;
+      }
+
+      this.supabase = client;
+
+      try {
+        const { data: { session }, error: sessErr } = await this.supabase.auth.getSession();
+        if (sessErr) {
+          console.warn('[Auth] Session restoration error:', sessErr.message);
+          this.currentUser = null;
+        } else if (session?.user) {
+          // Verify token authenticity against Supabase Auth server
+          const { data: { user: verifiedUser }, error: userErr } = await this.supabase.auth.getUser();
+          if (userErr || !verifiedUser) {
+            console.warn('[Auth] Session rejected by server:', userErr?.message || 'No user');
+            await this.supabase.auth.signOut().catch(() => {});
+            this.currentUser = null;
+          } else {
+            this.currentUser = this.mapSupabaseUser(verifiedUser);
+            await this.syncProfileWithDatabase(verifiedUser.id);
+          }
+        } else {
+          this.currentUser = null;
+        }
+      } catch (sbErr) {
+        console.warn('[Auth] Supabase verification notice:', sbErr);
+        this.currentUser = null;
+      }
+
+      this.notifyListeners();
+
+      // Subscribe to native Supabase auth transitions (deferring DB lookups to avoid auth-lock re-entrancy)
+      this.supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_OUT') {
+          this.stopAdminRealtime();
+          this.currentUser = null;
+          this.notifyListeners();
+          return;
+        }
+
+        if (
+          event === 'SIGNED_IN' ||
+          event === 'TOKEN_REFRESHED' ||
+          event === 'USER_UPDATED' ||
+          event === 'PASSWORD_RECOVERY'
+        ) {
+          if (!session?.user) return;
+          const userId = session.user.id;
+          const hydrated = this.mapSupabaseUser(session.user);
+          const accessToken = session.access_token || null;
+
+          setTimeout(async () => {
+            if (accessToken && this.supabase?.realtime?.setAuth) {
+              try {
+                await this.supabase.realtime.setAuth(accessToken);
+              } catch (_) {}
+            }
+
+            await this.syncProfileWithDatabase(userId, hydrated);
+
+            const prev = this.currentUser;
+            const changed = !prev || prev.id !== hydrated.id || prev.role !== hydrated.role || prev.name !== hydrated.name;
+            this.currentUser = hydrated;
+
+            if (hydrated.role !== 'admin') {
+              await this.stopAdminRealtime();
+            }
+
+            if (event !== 'TOKEN_REFRESHED' || changed) {
+              if (changed || event === 'USER_UPDATED') {
+                this.notifyListeners();
+              }
+            }
+            if (event === 'PASSWORD_RECOVERY') {
+              this.notifyRecoveryListeners();
+            }
+          }, 0);
+        }
+      });
     } catch (e) {
-      console.error('Failed to restore active session:', e);
+      console.error('Failed to initialize authentication:', e);
       this.currentUser = null;
+      this.notifyListeners();
     }
     return this.currentUser;
   },
 
   /**
-   * Persist active session in localStorage
-   * @param {Object} user 
-   */
-  saveSession(user) {
-    try {
-      if (user) {
-        localStorage.setItem(this.STORAGE_SESSION_KEY, JSON.stringify(user));
-        if (user.role !== 'admin' && user.email) {
-          this.saveUser(user);
-        }
-      } else {
-        localStorage.removeItem(this.STORAGE_SESSION_KEY);
-      }
-    } catch (e) {
-      console.error('Failed to save session:', e);
-    }
-  },
-
-  /**
-   * Check if user is currently authenticated
+   * Check if user is currently authenticated with a verified Supabase user
    * @returns {boolean}
    */
   isAuthenticated() {
@@ -222,7 +250,7 @@ export const Auth = {
   },
 
   /**
-   * Get current user profile
+   * Get current authenticated user profile
    * @returns {Object|null}
    */
   getUser() {
@@ -230,11 +258,32 @@ export const Auth = {
   },
 
   /**
+   * Get current Supabase JWT access token (if signed in)
+   * @returns {Promise<string|null>}
+   */
+  async getAccessToken() {
+    if (!this.supabase?.auth) return null;
+    try {
+      const { data: { session } } = await this.supabase.auth.getSession();
+      return session?.access_token || null;
+    } catch (_) {
+      return null;
+    }
+  },
+
+  /**
    * Store intended action to resume seamlessly after authentication
-   * @param {string} action 
+   * @param {string|null} action
    */
   setIntendedAction(action) {
     this.intendedAction = action;
+    try {
+      if (action) {
+        sessionStorage.setItem(this.INTENDED_ACTION_KEY, action);
+      } else {
+        sessionStorage.removeItem(this.INTENDED_ACTION_KEY);
+      }
+    } catch (_) {}
   },
 
   /**
@@ -242,19 +291,24 @@ export const Auth = {
    * @returns {string|null}
    */
   consumeIntendedAction() {
-    const action = this.intendedAction;
+    let action = this.intendedAction;
     this.intendedAction = null;
-    return action;
+    try {
+      if (!action) {
+        action = sessionStorage.getItem(this.INTENDED_ACTION_KEY);
+      }
+      sessionStorage.removeItem(this.INTENDED_ACTION_KEY);
+    } catch (_) {}
+    return action || null;
   },
 
   /**
    * Subscribe to authentication state changes
-   * @param {Function} callback 
+   * @param {Function} callback
    */
   onAuthStateChanged(callback) {
     if (typeof callback === 'function') {
       this.listeners.push(callback);
-      // Immediately call with current state
       callback(this.currentUser);
     }
   },
@@ -273,341 +327,529 @@ export const Auth = {
   },
 
   /**
-   * Authenticate user with Email and Password
-   * @param {Object} credentials 
-   * @param {string} credentials.email 
-   * @param {string} credentials.password 
+   * Subscribe to Supabase password recovery redirect events
+   * @param {Function} callback
+   */
+  onPasswordRecovery(callback) {
+    if (typeof callback === 'function') {
+      this.recoveryListeners.push(callback);
+    }
+  },
+
+  /**
+   * Notify password recovery listeners
+   */
+  notifyRecoveryListeners() {
+    this.recoveryListeners.forEach(cb => {
+      try {
+        cb();
+      } catch (err) {
+        console.error('Error in recovery listener:', err);
+      }
+    });
+  },
+
+  /**
+   * Authenticate user with Email (or admin username `ss@2718`) and Password via Supabase Auth
+   * @param {Object} credentials
+   * @param {string} credentials.email
+   * @param {string} credentials.password
    * @returns {Promise<{success: boolean, error?: string, user?: Object}>}
    */
   async login({ email, password }) {
-    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanIdentifier = (email || '').trim().toLowerCase();
     const cleanPass = password || '';
+    const isAdminAlias = cleanIdentifier === this.ADMIN_USERNAME;
 
-    if (!cleanEmail) {
+    if (!cleanIdentifier) {
       return { success: false, error: 'Email address or username is required.' };
+    }
+
+    if (!isAdminAlias && !this.isValidEmail(cleanIdentifier)) {
+      return { success: false, error: 'Please enter a valid email address or username.' };
     }
 
     if (!cleanPass) {
       return { success: false, error: 'Password is required.' };
     }
 
-    // Role-based authentication check
-    if (cleanEmail === 'ss@2718') {
-      if (cleanPass !== '9940856744') {
-        return { success: false, error: 'Incorrect password for admin.' };
-      }
-
-      this.currentUser = {
-        id: 'admin_1',
-        name: 'Admin',
-        email: 'ss@2718',
-        role: 'admin',
-        authProvider: 'local',
-        createdAt: new Date().toISOString()
-      };
-
-      this.saveSession(this.currentUser);
-      this.notifyListeners();
-      return { success: true, user: this.currentUser };
+    if (!this.supabase?.auth || typeof this.supabase.auth.signInWithPassword !== 'function') {
+      return { success: false, error: this.getCloudUnavailableMessage() };
     }
 
-    // 1. Supabase Auth Integration
-    if (this.supabase?.auth && typeof this.supabase.auth.signInWithPassword === 'function') {
-      try {
+    try {
+      let signedInUser = null;
+
+      if (isAdminAlias) {
+        const resp = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json'
+          },
+          cache: 'no-store',
+          body: JSON.stringify({
+            identifier: cleanIdentifier,
+            password: cleanPass
+          })
+        });
+        const payload = await resp.json().catch(() => ({}));
+
+        if (!resp.ok || !payload?.session?.access_token || !payload?.session?.refresh_token) {
+          return {
+            success: false,
+            error: payload?.error || 'Incorrect username or password.'
+          };
+        }
+
+        const { data: sessionData, error: sessionErr } = await this.supabase.auth.setSession({
+          access_token: payload.session.access_token,
+          refresh_token: payload.session.refresh_token
+        });
+
+        if (sessionErr || !sessionData?.user) {
+          return {
+            success: false,
+            error: sessionErr?.message || 'Could not establish verified authentication session.'
+          };
+        }
+        signedInUser = sessionData.user;
+      } else {
         const { data, error } = await this.supabase.auth.signInWithPassword({
-          email: cleanEmail,
+          email: cleanIdentifier,
           password: cleanPass
         });
+
         if (error) {
-          // If Supabase returned an error, verify if user is local fallback before rejecting
-          const localUser = this.getRegisteredUsers().find(u => u.email === cleanEmail);
-          if (localUser && localUser.password === cleanPass) {
-            // Fall through to local auth below
-          } else {
-            return { success: false, error: error.message || 'Incorrect email or password.' };
-          }
-        } else if (data?.user) {
+          return { success: false, error: error.message || 'Incorrect email or password.' };
+        }
+        signedInUser = data?.user || null;
+      }
+
+      if (!signedInUser) {
+        return { success: false, error: 'Login failed. No authenticated user returned.' };
+      }
+
+      this.currentUser = this.mapSupabaseUser(signedInUser);
+      await this.syncProfileWithDatabase(signedInUser.id);
+      this.notifyListeners();
+      return { success: true, user: this.currentUser };
+    } catch (sbErr) {
+      return { success: false, error: sbErr?.message || 'Unable to sign in. Please try again.' };
+    }
+  },
+
+  /**
+   * Authenticate or register user with Google via Supabase Auth
+   * Supports One Tap ID token (signInWithIdToken) or OAuth redirect (signInWithOAuth).
+   * @param {Object} [options]
+   * @param {string} [options.idToken]
+   * @returns {Promise<{success: boolean, error?: string, user?: Object, redirecting?: boolean}>}
+   */
+  async loginWithGoogle({ idToken } = {}) {
+    if (!this.supabase?.auth) {
+      return { success: false, error: this.getCloudUnavailableMessage() };
+    }
+
+    if (idToken) {
+      try {
+        const { data, error } = await this.supabase.auth.signInWithIdToken({
+          provider: 'google',
+          token: idToken
+        });
+        if (error) {
+          return { success: false, error: error.message || 'Google authentication failed.' };
+        }
+        if (data?.user) {
           this.currentUser = this.mapSupabaseUser(data.user);
           await this.syncProfileWithDatabase(data.user.id);
-          this.saveSession(this.currentUser);
           this.notifyListeners();
           return { success: true, user: this.currentUser };
         }
-      } catch (sbErr) {
-        console.warn('[Auth] Supabase signIn notice:', sbErr);
+        return { success: false, error: 'Google authentication returned no session.' };
+      } catch (err) {
+        return { success: false, error: err?.message || 'Google sign-in failed.' };
       }
     }
 
-    // Standard user email validation
-    if (!this.isValidEmail(cleanEmail)) {
-      return { success: false, error: 'Please enter a valid email address.' };
-    }
-
-    // Check if account exists
-    const existingUser = this.getRegisteredUsers().find(u => u.email === cleanEmail);
-    if (!existingUser) {
-      return {
-        success: false,
-        error: 'No account found with this email. Please create an account first.'
-      };
-    }
-
-    // Verify password against registered password
-    if (existingUser.password !== cleanPass) {
-      return {
-        success: false,
-        error: 'Incorrect password. Please try again.'
-      };
-    }
-
-    // Authentication successful
-    this.currentUser = {
-      id: existingUser.id,
-      name: existingUser.name,
-      email: existingUser.email,
-      role: existingUser.role || 'user',
-      authProvider: existingUser.authProvider || 'local',
-      picture: existingUser.picture || null,
-      createdAt: existingUser.createdAt
-    };
-
-    this.saveSession(this.currentUser);
-    this.notifyListeners();
-    return { success: true, user: this.currentUser };
-  },
-
-  /**
-   * Authenticate or register user via Google
-   * @param {Object} googleProfile 
-   * @param {string} googleProfile.email 
-   * @param {string} [googleProfile.name] 
-   * @param {string} [googleProfile.picture] 
-   * @returns {Promise<{success: boolean, error?: string, user?: Object}>}
-   */
-  async loginWithGoogle({ email, name, picture } = {}) {
-    const cleanEmail = (email || '').trim().toLowerCase();
-    if (!cleanEmail) {
-      return { success: false, error: 'Google account email is required.' };
-    }
-
-    if (!this.isValidEmail(cleanEmail)) {
-      return { success: false, error: 'Please enter a valid Google email address.' };
-    }
-
-    const cleanName = (name || '').trim() || cleanEmail.split('@')[0];
-    const existingUsers = this.getRegisteredUsers();
-    let existingUser = existingUsers.find(u => u.email === cleanEmail);
-
-    if (existingUser) {
-      // Update name/picture if available
-      if (picture) existingUser.picture = picture;
-      if (!existingUser.name || existingUser.name === existingUser.email) {
-        existingUser.name = cleanName;
-      }
-      existingUser.authProvider = 'google';
-      this.saveUser(existingUser);
-
-      this.currentUser = {
-        id: existingUser.id,
-        name: existingUser.name,
-        email: existingUser.email,
-        role: existingUser.role || 'user',
-        picture: existingUser.picture || null,
-        authProvider: 'google',
-        createdAt: existingUser.createdAt
-      };
-    } else {
-      const newUser = {
-        id: `usr_${Date.now().toString(36)}`,
-        name: cleanName,
-        email: cleanEmail,
-        role: 'user',
-        picture: picture || null,
-        authProvider: 'google',
-        createdAt: new Date().toISOString()
-      };
-      this.saveUser(newUser);
-
-      this.currentUser = {
-        id: newUser.id,
-        name: newUser.name,
-        email: newUser.email,
-        role: newUser.role,
-        picture: newUser.picture,
-        authProvider: 'google',
-        createdAt: newUser.createdAt
-      };
-    }
-
-    this.saveSession(this.currentUser);
-    this.notifyListeners();
-    return { success: true, user: this.currentUser };
-  },
-
-  /**
-   * Retrieve all registered users from localStorage
-   * @returns {Array<Object>}
-   */
-  getRegisteredUsers() {
+    // Verify whether Google OAuth is enabled in Supabase project settings before redirecting
     try {
-      const data = localStorage.getItem(this.STORAGE_USERS_KEY);
-      let users = data ? JSON.parse(data) : [];
-
-      // Ensure currentUser is always included if logged in as user
-      if (this.currentUser && this.currentUser.email && this.currentUser.role !== 'admin') {
-        const cleanEmail = this.currentUser.email.trim().toLowerCase();
-        const existingIdx = users.findIndex(u => u.email && u.email.trim().toLowerCase() === cleanEmail);
-        const currentUserData = {
-          id: this.currentUser.id || `usr_${Date.now().toString(36)}`,
-          name: this.currentUser.name || cleanEmail.split('@')[0],
-          email: cleanEmail,
-          role: this.currentUser.role || 'user',
-          authProvider: this.currentUser.authProvider || 'local',
-          picture: this.currentUser.picture || null,
-          createdAt: this.currentUser.createdAt || new Date().toISOString()
-        };
-
-        if (existingIdx === -1) {
-          users.unshift(currentUserData);
-          try {
-            localStorage.setItem(this.STORAGE_USERS_KEY, JSON.stringify(users));
-          } catch (e) {}
+      const { url, anonKey } = SupabaseConfig.getConfig();
+      if (url && anonKey) {
+        const settingsResp = await fetch(`${url.replace(/\/+$/, '')}/auth/v1/settings`, {
+          headers: { apikey: anonKey, Accept: 'application/json' },
+          cache: 'no-store'
+        });
+        if (settingsResp.ok) {
+          const settings = await settingsResp.json();
+          if (settings?.external && settings.external.google === false) {
+            return {
+              success: false,
+              error: 'Google Sign-In is not enabled in Supabase Authentication Providers yet. Please sign in with Email or enable Google in Supabase.'
+            };
+          }
         }
       }
+    } catch (_) {
+      // Proceed to OAuth attempt if preflight check is blocked by network
+    }
 
-      return users;
-    } catch (e) {
-      console.error('Failed to read users from localStorage:', e);
-      return [];
+    try {
+      const redirectTo = window.location.origin + window.location.pathname;
+      const { error } = await this.supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo }
+      });
+
+      if (error) {
+        return { success: false, error: error.message || 'Could not start Google sign-in.' };
+      }
+
+      return { success: true, redirecting: true };
+    } catch (oauthErr) {
+      return { success: false, error: oauthErr?.message || 'Google OAuth failed.' };
     }
   },
 
   /**
-   * Get total count of registered users (local fallback)
-   * @returns {number}
+   * Fetch server-verified Admin Dashboard overview (totalUsers, users, stats)
+   * from /api/admin/overview using the caller's verified Supabase JWT.
+   * Never reads from browser-local storage.
+   * @returns {Promise<{success: boolean, authorized: boolean, totalUsers: number, users: Array, stats: Object, error?: string}>}
    */
-  getUsersCount() {
-    return this.getRegisteredUsers().length;
+  async fetchAdminOverview() {
+    const emptyStats = { totalProjects: 0, dailyUploads: 0, filesGenerated: 0 };
+    if (!this.supabase?.auth) {
+      return {
+        success: false,
+        authorized: false,
+        totalUsers: 0,
+        users: [],
+        stats: emptyStats,
+        error: this.getCloudUnavailableMessage()
+      };
+    }
+
+    const token = await this.getAccessToken();
+    if (!token) {
+      return {
+        success: false,
+        authorized: false,
+        totalUsers: 0,
+        users: [],
+        stats: emptyStats,
+        error: 'Authentication required for admin access.'
+      };
+    }
+
+    try {
+      const resp = await fetch('/api/admin/overview', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json'
+        },
+        cache: 'no-store'
+      });
+
+      const payload = await resp.json().catch(() => ({}));
+
+      if (resp.status === 401 || resp.status === 403) {
+        if (resp.status === 403 && this.currentUser && this.currentUser.role === 'admin') {
+          this.currentUser.role = 'user';
+          this.notifyListeners();
+        }
+        return {
+          success: false,
+          authorized: false,
+          totalUsers: 0,
+          users: [],
+          stats: emptyStats,
+          error: payload.error || 'Admin access denied.'
+        };
+      }
+
+      if (!resp.ok) {
+        return {
+          success: false,
+          authorized: true,
+          totalUsers: 0,
+          users: [],
+          stats: emptyStats,
+          error: payload.error || `Server error (${resp.status}) while loading admin metrics.`
+        };
+      }
+
+      return {
+        success: true,
+        authorized: true,
+        totalUsers: typeof payload.totalUsers === 'number' ? payload.totalUsers : (payload.users?.length || 0),
+        users: Array.isArray(payload.users) ? payload.users : [],
+        stats: payload.stats || emptyStats,
+        source: payload.source
+      };
+    } catch (err) {
+      return {
+        success: false,
+        authorized: false,
+        totalUsers: 0,
+        users: [],
+        stats: emptyStats,
+        error: err?.message || 'Unable to reach admin backend endpoint.'
+      };
+    }
   },
 
   /**
-   * Fetch all registered users from Supabase PostgreSQL (for Admin Dashboard)
+   * Fetch all registered users from server-authorized Admin endpoint
    * @returns {Promise<Array>}
    */
   async fetchRegisteredUsers() {
-    if (this.supabase && this.currentUser?.role === 'admin') {
-      try {
-        const { data, error } = await this.supabase
-          .from('profiles')
-          .select('id, email, name, picture, role, auth_provider, created_at')
-          .order('created_at', { ascending: false });
-
-        if (!error && Array.isArray(data)) {
-          return data.map(row => ({
-            id: row.id,
-            email: row.email,
-            name: row.name || row.email?.split('@')[0] || 'User',
-            picture: row.picture || null,
-            role: row.role || 'user',
-            authProvider: row.auth_provider || 'email',
-            createdAt: row.created_at
-          }));
-        }
-      } catch (err) {
-        console.warn('[Auth] Admin users DB fetch notice:', err);
-      }
+    const overview = await this.fetchAdminOverview();
+    if (!overview.success) {
+      throw new Error(overview.error || 'Failed to load registered users.');
     }
-    return this.getRegisteredUsers();
+    return overview.users;
   },
 
   /**
-   * Fetch system-wide conversion metrics from Supabase PostgreSQL (for Admin Dashboard)
+   * Clear existing Supabase Realtime channel without changing wanted state
+   */
+  async _teardownAdminChannel() {
+    const channel = this._adminRealtimeChannel;
+    this._adminRealtimeChannel = null;
+    if (channel && this.supabase && typeof this.supabase.removeChannel === 'function') {
+      try {
+        await this.supabase.removeChannel(channel);
+      } catch (err) {
+        console.warn('[Realtime] Channel cleanup notice:', err?.message || err);
+      }
+    }
+  },
+
+  /**
+   * Handle Supabase Realtime channel status transitions and error recovery
+   * @param {string} status
+   * @param {Error|any} [err]
+   */
+  _handleAdminRealtimeStatus(status, err) {
+    if (status === 'SUBSCRIBED') {
+      this._adminRealtimeConnecting = false;
+      this._adminRealtimeRetryAttempt = 0;
+      if (this._adminRealtimeReconnectTimer) {
+        clearTimeout(this._adminRealtimeReconnectTimer);
+        this._adminRealtimeReconnectTimer = null;
+      }
+
+      const isReconnect = this._adminRealtimeHasSubscribedOnce || this._adminRealtimeNeedsResync;
+      this._adminRealtimeHasSubscribedOnce = true;
+      this._adminRealtimeNeedsResync = false;
+
+      this._adminRealtimeCallbacks?.onStatusChange?.('SUBSCRIBED', { reconnected: isReconnect });
+
+      // After reconnecting, immediately pull authoritative counts from backend
+      if (isReconnect) {
+        this._adminRealtimeCallbacks?.onDataChanged?.({ reason: 'reconnected' });
+      }
+      return;
+    }
+
+    if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+      this._adminRealtimeConnecting = false;
+      if (!this._adminRealtimeWanted) {
+        return;
+      }
+
+      this._adminRealtimeNeedsResync = true;
+      if (err) {
+        console.warn(`[Realtime] Admin subscription ${status}:`, err?.message || err);
+      } else {
+        console.warn(`[Realtime] Admin subscription status: ${status}`);
+      }
+      this._adminRealtimeCallbacks?.onStatusChange?.(status, { error: err });
+      this._scheduleAdminRealtimeReconnect();
+    }
+  },
+
+  /**
+   * Schedule exponential-backoff Realtime reconnect while Admin Dashboard remains open
+   */
+  _scheduleAdminRealtimeReconnect() {
+    if (!this._adminRealtimeWanted || this._adminRealtimeReconnectTimer) {
+      return;
+    }
+    const delayMs = Math.min(15000, 1000 * Math.pow(2, this._adminRealtimeRetryAttempt));
+    this._adminRealtimeRetryAttempt = Math.min(this._adminRealtimeRetryAttempt + 1, 5);
+
+    this._adminRealtimeReconnectTimer = setTimeout(async () => {
+      this._adminRealtimeReconnectTimer = null;
+      if (!this._adminRealtimeWanted || !this.currentUser || this.currentUser.role !== 'admin') {
+        return;
+      }
+      const callbacks = this._adminRealtimeCallbacks;
+      await this._teardownAdminChannel();
+      await this.startAdminRealtime(callbacks || {});
+    }, delayMs);
+  },
+
+  /**
+   * Start real-time PostgreSQL change subscription for verified Admin Dashboard.
+   * Subscribes to public.profiles and public.conversion_history under RLS.
+   * @param {Object} [callbacks]
+   * @param {Function} [callbacks.onDataChanged]
+   * @param {Function} [callbacks.onStatusChange]
+   * @returns {Promise<boolean>}
+   */
+  async startAdminRealtime({ onDataChanged, onStatusChange } = {}) {
+    if (!this.supabase || typeof this.supabase.channel !== 'function') {
+      onStatusChange?.('UNAVAILABLE', { error: new Error('Supabase Realtime client unavailable.') });
+      return false;
+    }
+    if (!this.currentUser || this.currentUser.role !== 'admin') {
+      return false;
+    }
+
+    // Reuse healthy active channel instead of duplicating subscriptions
+    if (
+      this._adminRealtimeWanted &&
+      this._adminRealtimeChannel &&
+      (this._adminRealtimeConnecting || this._adminRealtimeChannel.state === 'joined')
+    ) {
+      this._adminRealtimeCallbacks = { onDataChanged, onStatusChange };
+      return true;
+    }
+
+    await this._teardownAdminChannel();
+    if (this._adminRealtimeReconnectTimer) {
+      clearTimeout(this._adminRealtimeReconnectTimer);
+      this._adminRealtimeReconnectTimer = null;
+    }
+
+    this._adminRealtimeWanted = true;
+    this._adminRealtimeConnecting = true;
+    this._adminRealtimeCallbacks = { onDataChanged, onStatusChange };
+    onStatusChange?.('CONNECTING', {});
+
+    const token = await this.getAccessToken();
+    if (!token || !this._adminRealtimeWanted || this.currentUser?.role !== 'admin') {
+      this._adminRealtimeConnecting = false;
+      if (this._adminRealtimeWanted) {
+        onStatusChange?.('CHANNEL_ERROR', { error: new Error('Missing admin session token.') });
+      }
+      return false;
+    }
+
+    if (this.supabase.realtime && typeof this.supabase.realtime.setAuth === 'function') {
+      try {
+        await this.supabase.realtime.setAuth(token);
+      } catch (err) {
+        console.warn('[Realtime] setAuth notice:', err?.message || err);
+      }
+    }
+
+    if (!this._adminRealtimeWanted || this.currentUser?.role !== 'admin') {
+      this._adminRealtimeConnecting = false;
+      return false;
+    }
+
+    const channel = this.supabase.channel(`scansheet-admin-sync-${Date.now()}`);
+    this._adminRealtimeChannel = channel;
+
+    channel
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload) => {
+        if (this._adminRealtimeChannel !== channel || !this._adminRealtimeWanted) return;
+        this._adminRealtimeCallbacks?.onDataChanged?.({
+          reason: 'db_change',
+          table: 'profiles',
+          eventType: payload?.eventType,
+          payload
+        });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversion_history' }, (payload) => {
+        if (this._adminRealtimeChannel !== channel || !this._adminRealtimeWanted) return;
+        this._adminRealtimeCallbacks?.onDataChanged?.({
+          reason: 'db_change',
+          table: 'conversion_history',
+          eventType: payload?.eventType,
+          payload
+        });
+      })
+      .subscribe((status, err) => {
+        if (this._adminRealtimeChannel !== channel) return;
+        this._handleAdminRealtimeStatus(status, err);
+      });
+
+    return true;
+  },
+
+  /**
+   * Ensure Admin Realtime stays connected after network recovery or tab wake
+   */
+  async ensureAdminRealtimeConnected() {
+    if (!this._adminRealtimeWanted || !this.currentUser || this.currentUser.role !== 'admin') {
+      return false;
+    }
+
+    const state = this._adminRealtimeChannel?.state;
+    if (state === 'joined' || this._adminRealtimeConnecting) {
+      return true;
+    }
+
+    this._adminRealtimeNeedsResync = true;
+    if (this._adminRealtimeReconnectTimer) {
+      clearTimeout(this._adminRealtimeReconnectTimer);
+      this._adminRealtimeReconnectTimer = null;
+    }
+    const callbacks = this._adminRealtimeCallbacks || {};
+    await this._teardownAdminChannel();
+    return this.startAdminRealtime(callbacks);
+  },
+
+  /**
+   * Cleanly unsubscribe and tear down Admin Realtime subscription
+   */
+  async stopAdminRealtime() {
+    this._adminRealtimeWanted = false;
+    this._adminRealtimeConnecting = false;
+    this._adminRealtimeHasSubscribedOnce = false;
+    this._adminRealtimeNeedsResync = false;
+    this._adminRealtimeRetryAttempt = 0;
+    this._adminRealtimeCallbacks = null;
+    if (this._adminRealtimeReconnectTimer) {
+      clearTimeout(this._adminRealtimeReconnectTimer);
+      this._adminRealtimeReconnectTimer = null;
+    }
+    await this._teardownAdminChannel();
+  },
+
+  /**
+   * Fetch system-wide conversion metrics from server-authorized Admin endpoint
    * @returns {Promise<{totalProjects: number, dailyUploads: number, filesGenerated: number}>}
    */
   async fetchAdminStats() {
-    const empty = { totalProjects: 0, dailyUploads: 0, filesGenerated: 0 };
-    if (!this.supabase || this.currentUser?.role !== 'admin') {
-      return empty;
+    const overview = await this.fetchAdminOverview();
+    if (!overview.success) {
+      throw new Error(overview.error || 'Failed to load admin stats.');
     }
-
-    try {
-      const { data, error } = await this.supabase
-        .from('conversion_history')
-        .select('id, status, created_at');
-
-      if (error || !Array.isArray(data)) {
-        return empty;
-      }
-
-      const todayStr = new Date().toDateString();
-      let dailyUploads = 0;
-      let filesGenerated = 0;
-
-      for (const row of data) {
-        if (row.created_at && new Date(row.created_at).toDateString() === todayStr) {
-          dailyUploads++;
-        }
-        if (row.status === 'completed') {
-          filesGenerated++;
-        }
-      }
-
-      return {
-        totalProjects: data.length,
-        dailyUploads,
-        filesGenerated
-      };
-    } catch (err) {
-      console.warn('[Auth] Admin stats DB fetch notice:', err);
-      return empty;
-    }
+    return overview.stats;
   },
 
   /**
-   * Persist user into localStorage
-   * @param {Object} user 
+   * Local user counting is disabled; returns 0 (always use fetchAdminOverview().totalUsers)
+   * @returns {number}
    */
-  saveUser(user) {
-    try {
-      if (!user || !user.email) return;
-      const cleanEmail = user.email.trim().toLowerCase();
-      const data = localStorage.getItem(this.STORAGE_USERS_KEY);
-      const users = data ? JSON.parse(data) : [];
-      const existingIdx = users.findIndex(u => u.email && u.email.trim().toLowerCase() === cleanEmail);
-
-      const userRecord = {
-        id: user.id || `usr_${Date.now().toString(36)}`,
-        name: user.name || cleanEmail.split('@')[0],
-        email: cleanEmail,
-        role: user.role || 'user',
-        authProvider: user.authProvider || 'local',
-        picture: user.picture || null,
-        createdAt: user.createdAt || new Date().toISOString()
-      };
-      if (user.password) {
-        userRecord.password = user.password;
-      }
-
-      if (existingIdx >= 0) {
-        users[existingIdx] = { ...users[existingIdx], ...userRecord };
-      } else {
-        users.unshift(userRecord);
-      }
-
-      localStorage.setItem(this.STORAGE_USERS_KEY, JSON.stringify(users));
-    } catch (e) {
-      console.error('Failed to save user to localStorage:', e);
-    }
+  getUsersCount() {
+    return 0;
   },
 
   /**
-   * Register new user account
-   * @param {Object} data 
-   * @param {string} data.name 
-   * @param {string} data.email 
-   * @param {string} data.password 
-   * @param {string} data.confirmPassword 
-   * @returns {Promise<{success: boolean, error?: string, user?: Object}>}
+   * Register new user account directly in Supabase Auth
+   * @param {Object} data
+   * @param {string} data.name
+   * @param {string} data.email
+   * @param {string} data.password
+   * @param {string} data.confirmPassword
+   * @returns {Promise<{success: boolean, error?: string, requiresConfirmation?: boolean, user?: Object}>}
    */
   async signup({ name, email, password, confirmPassword }) {
     const cleanName = (name || '').trim();
@@ -639,73 +881,54 @@ export const Auth = {
       return { success: false, error: 'Passwords do not match.' };
     }
 
-    // 1. Supabase Auth Registration
-    if (this.supabase?.auth && typeof this.supabase.auth.signUp === 'function') {
-      try {
-        const { data, error } = await this.supabase.auth.signUp({
-          email: cleanEmail,
-          password: cleanPass,
-          options: {
-            data: {
-              full_name: cleanName,
-              name: cleanName
-            }
+    if (!this.supabase?.auth || typeof this.supabase.auth.signUp !== 'function') {
+      return { success: false, error: this.getCloudUnavailableMessage() };
+    }
+
+    try {
+      const { data, error } = await this.supabase.auth.signUp({
+        email: cleanEmail,
+        password: cleanPass,
+        options: {
+          emailRedirectTo: window.location.origin + window.location.pathname,
+          data: {
+            full_name: cleanName,
+            name: cleanName
           }
-        });
-        if (error) {
-          return { success: false, error: error.message };
         }
-        if (data?.session?.user) {
-          this.currentUser = this.mapSupabaseUser(data.session.user);
-          await this.syncProfileWithDatabase(data.session.user.id);
-          this.saveSession(this.currentUser);
-          this.notifyListeners();
-          return { success: true, user: this.currentUser };
-        } else if (data?.user) {
-          return {
-            success: true,
-            requiresConfirmation: true,
-            user: this.mapSupabaseUser(data.user),
-            message: 'Account created! Please check your email and click the confirmation link to activate your account.'
-          };
-        }
-      } catch (sbErr) {
-        console.warn('[Auth] Supabase signUp error:', sbErr);
+      });
+
+      if (error) {
+        return { success: false, error: error.message || 'Could not register account in Supabase.' };
       }
+
+      if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        return {
+          success: false,
+          error: 'An account with this email already exists. Please log in or reset your password.'
+        };
+      }
+
+      if (data?.session?.user) {
+        this.currentUser = this.mapSupabaseUser(data.session.user);
+        await this.syncProfileWithDatabase(data.session.user.id);
+        this.notifyListeners();
+        return { success: true, user: this.currentUser };
+      }
+
+      if (data?.user) {
+        return {
+          success: true,
+          requiresConfirmation: true,
+          user: this.mapSupabaseUser(data.user),
+          message: 'Account created! Please check your email and click the confirmation link to activate your account.'
+        };
+      }
+
+      return { success: false, error: 'Signup completed without a user response.' };
+    } catch (sbErr) {
+      return { success: false, error: sbErr?.message || 'Supabase account registration failed.' };
     }
-
-    // Check if account already exists with this email
-    const existingUsers = this.getRegisteredUsers();
-    if (existingUsers.some(u => u.email === cleanEmail)) {
-      return { success: false, error: 'An account with this email already exists.' };
-    }
-
-    const newUser = {
-      id: `usr_${Date.now().toString(36)}`,
-      name: cleanName,
-      email: cleanEmail,
-      password: cleanPass,
-      role: 'user',
-      authProvider: 'local',
-      createdAt: new Date().toISOString()
-    };
-
-    // Save into localStorage
-    this.saveUser(newUser);
-
-    // Active session user without sensitive password
-    this.currentUser = {
-      id: newUser.id,
-      name: newUser.name,
-      email: newUser.email,
-      role: newUser.role,
-      authProvider: 'local',
-      createdAt: newUser.createdAt
-    };
-
-    this.saveSession(this.currentUser);
-    this.notifyListeners();
-    return { success: true, user: this.currentUser };
   },
 
   /**
@@ -792,11 +1015,11 @@ export const Auth = {
 
   /**
    * Initiates account registration by validating details and sending a 110s OTP
-   * @param {Object} data 
-   * @param {string} data.name 
-   * @param {string} data.email 
-   * @param {string} data.password 
-   * @param {string} data.confirmPassword 
+   * @param {Object} data
+   * @param {string} data.name
+   * @param {string} data.email
+   * @param {string} data.password
+   * @param {string} data.confirmPassword
    * @returns {Promise<{success: boolean, error?: string, email?: string, expiresAt?: number}>}
    */
   async initiateSignup({ name, email, password, confirmPassword }) {
@@ -829,10 +1052,8 @@ export const Auth = {
       return { success: false, error: 'Passwords do not match.' };
     }
 
-    // Check if account already exists with this email
-    const existingUsers = this.getRegisteredUsers();
-    if (existingUsers.some(u => u.email === cleanEmail)) {
-      return { success: false, error: 'An account with this email already exists.' };
+    if (!this.supabase?.auth || typeof this.supabase.auth.signUp !== 'function') {
+      return { success: false, error: this.getCloudUnavailableMessage() };
     }
 
     const otp = this.generateOtp();
@@ -863,9 +1084,9 @@ export const Auth = {
   },
 
   /**
-   * Verifies the 6-digit OTP code and finalizes registration
-   * @param {string} enteredOtp 
-   * @returns {Promise<{success: boolean, error?: string, expired?: boolean, user?: Object}>}
+   * Verifies the 6-digit OTP code and creates the real Supabase Auth user
+   * @param {string} enteredOtp
+   * @returns {Promise<{success: boolean, error?: string, expired?: boolean, requiresConfirmation?: boolean, user?: Object}>}
    */
   async verifyOtp(enteredOtp) {
     if (!this.pendingRegistration) {
@@ -877,7 +1098,6 @@ export const Auth = {
       return { success: false, error: 'Please enter the 6-digit verification code.' };
     }
 
-    // Check expiration (Strict 1 minute 50 seconds limit)
     if (Date.now() > this.pendingRegistration.expiresAt) {
       return {
         success: false,
@@ -886,7 +1106,6 @@ export const Auth = {
       };
     }
 
-    // Verify OTP code matches
     if (cleanOtp !== this.pendingRegistration.otp) {
       return {
         success: false,
@@ -894,64 +1113,21 @@ export const Auth = {
       };
     }
 
-    // If Supabase Auth is active, register verified user with Supabase Auth
-    if (this.supabase?.auth && typeof this.supabase.auth.signUp === 'function') {
-      try {
-        const { data, error } = await this.supabase.auth.signUp({
-          email: this.pendingRegistration.email,
-          password: this.pendingRegistration.password,
-          options: {
-            data: {
-              full_name: this.pendingRegistration.name,
-              name: this.pendingRegistration.name
-            }
-          }
-        });
-        if (error) {
-          return { success: false, error: error.message || 'Could not register account in Supabase.' };
-        }
-        this.pendingRegistration = null;
+    const pending = this.pendingRegistration;
+    const result = await this.signup({
+      name: pending.name,
+      email: pending.email,
+      password: pending.password,
+      confirmPassword: pending.password
+    });
 
-        if (data?.session?.user) {
-          this.currentUser = this.mapSupabaseUser(data.session.user);
-          await this.syncProfileWithDatabase(data.session.user.id);
-          this.saveSession(this.currentUser);
-          this.notifyListeners();
-          return { success: true, user: this.currentUser };
-        }
-
-        if (data?.user) {
-          return {
-            success: true,
-            requiresConfirmation: true,
-            user: this.mapSupabaseUser(data.user),
-            message: 'Please click the confirmation link sent to your email to finish activating your account.'
-          };
-        }
-      } catch (sbErr) {
-        return { success: false, error: sbErr.message || 'Supabase account registration failed.' };
-      }
+    if (result.success) {
+      this.pendingRegistration = null;
+    } else if (result.error && result.error.toLowerCase().includes('already exists')) {
+      this.pendingRegistration = null;
     }
 
-    // Offline fallback registration (without storing plaintext password)
-    const newUser = {
-      id: `usr_${Date.now().toString(36)}`,
-      name: this.pendingRegistration.name,
-      email: this.pendingRegistration.email,
-      role: 'user',
-      authProvider: 'local',
-      emailVerified: true,
-      createdAt: new Date().toISOString()
-    };
-
-    this.saveUser({ ...newUser, password: this.pendingRegistration.password });
-
-    this.currentUser = newUser;
-    this.saveSession(this.currentUser);
-    this.pendingRegistration = null;
-    this.notifyListeners();
-
-    return { success: true, user: this.currentUser };
+    return result;
   },
 
   /**
@@ -985,85 +1161,9 @@ export const Auth = {
   },
 
   /**
-   * Sends Password Recovery OTP email to user via EmailJS
-   * @param {string} email Destination email address
-   * @param {string} [name] User full name
-   * @param {string} otp 6-digit code
-   * @returns {Promise<{success: boolean, response?: any}>}
-   */
-  async sendRecoveryOtpEmail(email, name, otp) {
-    const fullMessage = `ScanSheet Password Reset Code.\nThis code is system generated.\nValid for 1 minute 50 seconds.\n\nYour recovery code is: ${otp}\n\nIf you did not request a password reset, please ignore this email.`;
-    const templateParams = {
-      from_name: 'ScanSheet Security',
-      to_email: email,
-      email: email,
-      recipient_email: email,
-      user_email: email,
-      reply_to: email,
-      to_name: name || 'ScanSheet User',
-      user_name: name || 'ScanSheet User',
-      name: name || 'ScanSheet User',
-      otp_code: otp,
-      otp: otp,
-      code: otp,
-      passcode: otp,
-      verification_code: otp,
-      pin: otp,
-      valid_time: '1 minute 50 seconds',
-      subject: 'ScanSheet Password Reset Code',
-      title: 'ScanSheet Password Reset Code',
-      message: fullMessage,
-      body: fullMessage,
-      content: fullMessage,
-      text: fullMessage
-    };
-
-    // Attempt 1: Official EmailJS SDK if available
-    if (window.emailjs && typeof window.emailjs.send === 'function') {
-      try {
-        const response = await window.emailjs.send(
-          this.EMAILJS_CONFIG.SERVICE_ID,
-          this.EMAILJS_CONFIG.TEMPLATE_ID,
-          templateParams,
-          this.EMAILJS_CONFIG.PUBLIC_KEY
-        );
-        return { success: true, response };
-      } catch (sdkError) {
-        console.warn('EmailJS SDK recovery send notice:', sdkError);
-      }
-    }
-
-    // Attempt 2: Direct REST API Endpoint
-    try {
-      const response = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          service_id: this.EMAILJS_CONFIG.SERVICE_ID,
-          template_id: this.EMAILJS_CONFIG.TEMPLATE_ID,
-          user_id: this.EMAILJS_CONFIG.PUBLIC_KEY,
-          template_params: templateParams
-        })
-      });
-
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(errText || `Email service error (status ${response.status})`);
-      }
-
-      return { success: true };
-    } catch (apiError) {
-      console.error('EmailJS REST API recovery dispatch error:', apiError);
-      throw new Error(apiError.message || 'Unable to deliver recovery email.');
-    }
-  },
-
-  /**
-   * Initiates password recovery flow:
-   * Validates email format, verifies account, dispatches time-limited recovery OTP,
-   * and preserves security by not disclosing account existence to unauthenticated callers.
-   * @param {string} email 
-   * @returns {Promise<{success: boolean, error?: string, email?: string, expiresAt?: number}>}
+   * Initiates password recovery flow using Supabase Auth resetPasswordForEmail
+   * @param {string} email
+   * @returns {Promise<{success: boolean, error?: string, mode?: string, email?: string}>}
    */
   async initiatePasswordRecovery(email) {
     const cleanEmail = (email || '').trim().toLowerCase();
@@ -1076,275 +1176,104 @@ export const Auth = {
       return { success: false, error: 'Please enter a valid email address.' };
     }
 
-    // Support for Supabase Auth if integrated
-    if (this.supabase?.auth && typeof this.supabase.auth.resetPasswordForEmail === 'function') {
-      try {
-        const { error } = await this.supabase.auth.resetPasswordForEmail(cleanEmail, {
-          redirectTo: window.location.origin + window.location.pathname
-        });
-        if (error) throw error;
-        return {
-          success: true,
-          email: cleanEmail,
-          expiresAt: Date.now() + (this.EMAILJS_CONFIG.OTP_VALIDITY_SECONDS * 1000)
-        };
-      } catch (sbErr) {
-        return { success: false, error: sbErr.message || 'Failed to send recovery email.' };
-      }
+    if (!this.supabase?.auth || typeof this.supabase.auth.resetPasswordForEmail !== 'function') {
+      return { success: false, error: this.getCloudUnavailableMessage() };
     }
 
-    const registeredUsers = this.getRegisteredUsers();
-    const existingUser = registeredUsers.find(u => u.email === cleanEmail);
-
-    const otp = this.generateOtp();
-    const token = `rec_tok_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 10)}`;
-    const expiresAt = Date.now() + (this.EMAILJS_CONFIG.OTP_VALIDITY_SECONDS * 1000);
-
-    // OWASP & Security Requirement:
-    // If user exists, dispatch time-limited recovery OTP and store pending state.
-    // If user does not exist, do not reveal account existence in unauthenticated response.
-    if (existingUser) {
-      this.pendingPasswordRecovery = {
-        email: cleanEmail,
-        name: existingUser.name,
-        otp,
-        token,
-        expiresAt,
-        verified: false
-      };
-
-      try {
-        await this.sendRecoveryOtpEmail(cleanEmail, existingUser.name, otp);
-        return {
-          success: true,
-          email: cleanEmail,
-          expiresAt
-        };
-      } catch (err) {
-        console.warn('Recovery email send notice:', err);
-        // Fallback info log for dev/test environments without internet
-        console.info(`[ScanSheet Security] Recovery Code for ${cleanEmail}: ${otp}`);
-        return {
-          success: true,
-          email: cleanEmail,
-          expiresAt
-        };
+    try {
+      const { error } = await this.supabase.auth.resetPasswordForEmail(cleanEmail, {
+        redirectTo: window.location.origin + window.location.pathname
+      });
+      if (error) {
+        return { success: false, error: error.message || 'Failed to send recovery email.' };
       }
-    } else {
-      // Fake non-existent user state without valid OTP to prevent account enumeration
-      this.pendingPasswordRecovery = {
-        email: cleanEmail,
-        name: null,
-        otp: null,
-        token: null,
-        expiresAt,
-        verified: false
-      };
-
       return {
         success: true,
-        email: cleanEmail,
-        expiresAt
+        mode: 'supabase_link',
+        email: cleanEmail
       };
+    } catch (sbErr) {
+      return { success: false, error: sbErr?.message || 'Failed to send recovery email.' };
     }
   },
 
   /**
-   * Verifies the 6-digit recovery OTP code and establishes a time-limited recovery session
-   * @param {string} enteredOtp 
-   * @returns {Promise<{success: boolean, error?: string, expired?: boolean, email?: string, token?: string}>}
+   * Legacy recovery OTP methods preserved safely (cloud recovery uses Supabase email links)
    */
-  async verifyRecoveryOtp(enteredOtp) {
-    if (!this.pendingPasswordRecovery) {
-      return { success: false, error: 'No recovery request found. Please enter your email to continue.' };
-    }
-
-    const cleanOtp = (enteredOtp || '').toString().trim();
-    if (!cleanOtp) {
-      return { success: false, error: 'Please enter the 6-digit recovery code.' };
-    }
-
-    // Verify time-limited expiration
-    if (Date.now() > this.pendingPasswordRecovery.expiresAt) {
-      return {
-        success: false,
-        error: 'Recovery code has expired. Please click Resend Code to receive a new one.',
-        expired: true
-      };
-    }
-
-    // Verify code matching (fails safely if email was not registered or code is incorrect)
-    if (!this.pendingPasswordRecovery.otp || cleanOtp !== this.pendingPasswordRecovery.otp) {
-      return {
-        success: false,
-        error: 'Invalid recovery code. Please check your email and try again.'
-      };
-    }
-
-    // Establish a verified, time-limited password recovery session (15 minutes validity)
-    const sessionToken = this.pendingPasswordRecovery.token || `rec_sess_${Date.now().toString(36)}`;
-    this.recoverySession = {
-      email: this.pendingPasswordRecovery.email,
-      token: sessionToken,
-      expiresAt: Date.now() + (15 * 60 * 1000), // 15 minutes
-      verified: true
-    };
-
-    const targetEmail = this.pendingPasswordRecovery.email;
-    this.pendingPasswordRecovery = null;
-
+  async verifyRecoveryOtp() {
     return {
-      success: true,
-      email: targetEmail,
-      token: sessionToken
+      success: false,
+      error: 'Please use the password reset link sent to your email.'
+    };
+  },
+
+  async resendRecoveryOtp() {
+    return {
+      success: false,
+      error: 'Please request a new password reset link from Forgot Password.'
     };
   },
 
   /**
-   * Resends a fresh recovery code and resets the countdown timer
-   * @returns {Promise<{success: boolean, error?: string, email?: string, expiresAt?: number}>}
-   */
-  async resendRecoveryOtp() {
-    if (!this.pendingPasswordRecovery) {
-      return { success: false, error: 'No recovery request in progress. Please enter your email.' };
-    }
-
-    const cleanEmail = this.pendingPasswordRecovery.email;
-    const newOtp = this.generateOtp();
-    const expiresAt = Date.now() + (this.EMAILJS_CONFIG.OTP_VALIDITY_SECONDS * 1000);
-
-    const registeredUsers = this.getRegisteredUsers();
-    const existingUser = registeredUsers.find(u => u.email === cleanEmail);
-
-    if (existingUser) {
-      this.pendingPasswordRecovery.otp = newOtp;
-      this.pendingPasswordRecovery.expiresAt = expiresAt;
-
-      try {
-        await this.sendRecoveryOtpEmail(cleanEmail, existingUser.name, newOtp);
-        return { success: true, email: cleanEmail, expiresAt };
-      } catch (err) {
-        console.info(`[ScanSheet Security] Resent Recovery Code for ${cleanEmail}: ${newOtp}`);
-        return { success: true, email: cleanEmail, expiresAt };
-      }
-    } else {
-      this.pendingPasswordRecovery.expiresAt = expiresAt;
-      return { success: true, email: cleanEmail, expiresAt };
-    }
-  },
-
-  /**
-   * Checks whether an active, verified recovery session exists and is not expired
-   * @param {string} [token] Optional token to verify
-   * @returns {boolean}
-   */
-  hasValidRecoverySession(token) {
-    if (!this.recoverySession || !this.recoverySession.verified) {
-      return false;
-    }
-    if (Date.now() > this.recoverySession.expiresAt) {
-      return false;
-    }
-    if (token && this.recoverySession.token !== token) {
-      return false;
-    }
-    return true;
-  },
-
-  /**
-   * Updates user password after confirming valid recovery session.
-   * Never updates passwords directly or without verification.
-   * Does not store passwords in localStorage or sessionStorage session objects.
+   * Updates user password in Supabase Auth using an active verified recovery session
    * @param {Object} params
    * @param {string} params.newPassword
    * @param {string} params.confirmPassword
-   * @param {string} [params.token]
    * @returns {Promise<{success: boolean, error?: string}>}
    */
-  async resetPassword({ newPassword, confirmPassword, token }) {
-    // Support Supabase Auth if integrated
-    if (this.supabase?.auth && typeof this.supabase.auth.updateUser === 'function') {
-      try {
-        const { error } = await this.supabase.auth.updateUser({ password: newPassword });
-        if (error) throw error;
-        return { success: true };
-      } catch (sbErr) {
-        return { success: false, error: sbErr.message || 'Failed to update password.' };
-      }
-    }
-
-    // Security Check: Confirm recovery session is valid
-    if (!this.hasValidRecoverySession(token)) {
-      return {
-        success: false,
-        error: 'Your password recovery session has expired or is invalid. Please start over from Forgot Password.'
-      };
-    }
-
+  async resetPassword({ newPassword, confirmPassword }) {
     const cleanPass = newPassword || '';
     const cleanConfirm = confirmPassword || '';
 
-    // Validation: Both fields required
     if (!cleanPass || !cleanConfirm) {
       return { success: false, error: 'Both password fields are required.' };
     }
 
-    // Validation: Password policy (minimum 6 characters)
     if (cleanPass.length < 6) {
       return { success: false, error: 'Password must be at least 6 characters.' };
     }
 
-    // Validation: Passwords must match
     if (cleanPass !== cleanConfirm) {
-      return { success: false, error: 'Passwords do not match. Please retype to confirm.' };
+      return { success: false, error: 'Passwords do not match.' };
     }
 
-    const emailToUpdate = this.recoverySession.email;
-    const registeredUsers = this.getRegisteredUsers();
-    const userIdx = registeredUsers.findIndex(u => u.email === emailToUpdate);
-
-    if (userIdx === -1) {
-      return {
-        success: false,
-        error: 'Account could not be found to update password.'
-      };
+    if (!this.supabase?.auth || typeof this.supabase.auth.updateUser !== 'function') {
+      return { success: false, error: this.getCloudUnavailableMessage() };
     }
-
-    // Update password in the user store of the auth provider
-    registeredUsers[userIdx].password = cleanPass;
-    registeredUsers[userIdx].authProvider = 'local';
-    registeredUsers[userIdx].updatedAt = new Date().toISOString();
 
     try {
-      localStorage.setItem(this.STORAGE_USERS_KEY, JSON.stringify(registeredUsers));
-    } catch (e) {
-      return { success: false, error: 'Failed to save updated password. Storage error.' };
+      const { data: { user }, error: sessionErr } = await this.supabase.auth.getUser();
+      if (sessionErr || !user) {
+        return {
+          success: false,
+          error: 'Recovery session expired or invalid. Open the reset link from your email again.'
+        };
+      }
+
+      const { error } = await this.supabase.auth.updateUser({ password: cleanPass });
+      if (error) {
+        return { success: false, error: error.message || 'Failed to update password.' };
+      }
+      return { success: true };
+    } catch (sbErr) {
+      return { success: false, error: sbErr?.message || 'Failed to update password.' };
     }
-
-    // Invalidate the recovery session immediately to prevent replay
-    this.recoverySession = null;
-    this.pendingPasswordRecovery = null;
-
-    return { success: true };
   },
 
   /**
-   * Validates a recovery link token from URL and establishes a recovery session
-   * @param {string} token 
+   * Validates a recovery link token from URL when Supabase client is configured
+   * @param {string} token
    * @returns {boolean}
    */
   handleRecoveryLink(token) {
-    if (!token) return false;
-    if (this.supabase?.auth) {
-      return true;
-    }
-    return false;
+    return Boolean(token && this.supabase?.auth);
   },
 
   /**
-   * Sign out current user
+   * Sign out current user from Supabase Auth
    */
   async logout() {
+    await this.stopAdminRealtime();
     if (this.supabase?.auth && typeof this.supabase.auth.signOut === 'function') {
       try {
         await this.supabase.auth.signOut();
@@ -1353,14 +1282,13 @@ export const Auth = {
       }
     }
     this.currentUser = null;
-    this.intendedAction = null;
-    this.saveSession(null);
+    this.setIntendedAction(null);
     this.notifyListeners();
   },
 
   /**
    * Helper email format validator
-   * @param {string} email 
+   * @param {string} email
    * @returns {boolean}
    */
   isValidEmail(email) {

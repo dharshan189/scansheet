@@ -16,22 +16,25 @@ export default function handler(req, res) {
     return res.status(200).end();
   }
 
-  const supabaseUrl =
+  const supabaseUrl = (
     process.env.SUPABASE_URL ||
     process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    '';
-  const supabaseAnonKey =
+    ''
+  ).trim();
+  const supabaseAnonKey = (
     process.env.SUPABASE_ANON_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
     process.env.SUPABASE_PUBLISHABLE_KEY ||
-    '';
-  const ocrServerUrl = process.env.OCR_SERVER_URL || '';
+    ''
+  ).trim();
+  const ocrServerUrl = (process.env.OCR_SERVER_URL || '').trim();
 
   return res.status(200).json({
     supabaseUrl,
     supabaseAnonKey,
-    ocrServerUrl
+    ocrServerUrl,
+    configured: Boolean(supabaseUrl && supabaseAnonKey)
   });
 }
 
