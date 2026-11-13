@@ -1,0 +1,25 @@
+{
+  "name": "ScanSheet - Table & Document Scanner",
+  "short_name": "ScanSheet",
+  "description": "Turn table and scanned images into editable Excel, Word, PDF and Image files.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f8fafc",
+  "theme_color": "#059669",
+  "icons": [
+    {
+      "src": "assets/icons/logo.svg",
+      "sizes": "64x64 128x128 192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/sheet.svg",
+      "sizes": "64x64",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

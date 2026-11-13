@@ -4,15 +4,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#ffffff">
+  <meta name="theme-color" content="#059669">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="description"
     content="ScanSheet - Turn table images into editable Excel files. Commercial-grade document and table extraction.">
 
   <title>ScanSheet - Turn table images into editable Excel files</title>
 
-  <!-- Favicon / App Icon -->
+  <!-- Web App Manifest & App Icons -->
+  <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/svg+xml" href="assets/icons/logo.svg">
 
   <!-- Core Stylesheets -->
@@ -29,6 +31,19 @@
 <body>
   <!-- Screen reader live region for accessibility announcements -->
   <div id="a11y-live-region" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Persistent Offline Status Banner (Visible when offline) -->
+  <aside id="network-offline-banner" class="network-offline-banner" role="status" aria-live="assertive" hidden>
+    <div class="network-offline-container">
+      <span class="offline-pulse-dot" aria-hidden="true"></span>
+      <span class="offline-banner-text" id="network-offline-message">
+        <strong>You are offline.</strong> Showing local workspace. Cloud sync will resume once reconnected.
+      </span>
+      <button type="button" id="btn-offline-retry" class="btn-offline-retry" title="Retry network connection">
+        <span>Retry</span>
+      </button>
+    </div>
+  </aside>
 
   <!-- Header -->
   <header class="app-header" role="banner">
@@ -1535,6 +1550,21 @@
 
   <!-- Application Logic -->
   <script type="module" src="js/app.js?v=6.8"></script>
+
+  <!-- Progressive Web App Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/sw.js', { scope: '/' })
+          .then(function (registration) {
+            console.log('[ScanSheet] ServiceWorker active with scope:', registration.scope);
+          })
+          .catch(function (error) {
+            console.warn('[ScanSheet] ServiceWorker registration notice:', error);
+          });
+      });
+    }
+  </script>
 </body>
 
 </html>

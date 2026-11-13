@@ -1322,5 +1322,77 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  // --------------------------------------------------------------------------
+  // NETWORK CONNECTIVITY & OFFLINE EXPERIENCE MANAGEMENT
+  // --------------------------------------------------------------------------
+  const offlineBanner = Utils.qs('#network-offline-banner');
+  const offlineMessage = Utils.qs('#network-offline-message');
+  const btnOfflineRetry = Utils.qs('#btn-offline-retry');
+
+  function updateNetworkStatus(isOnline) {
+    if (!offlineBanner) return;
+
+    if (!isOnline) {
+      offlineBanner.classList.remove('online-recovered');
+      if (offlineMessage) {
+        offlineMessage.innerHTML = '<strong>You are offline.</strong> Showing local workspace. Cloud sync will resume once reconnected.';
+      }
+      offlineBanner.removeAttribute('hidden');
+      UI.showNotification('Internet connection lost. ScanSheet is running in offline mode.');
+      Utils.announce('Internet connection lost. Running in offline mode.');
+    } else {
+      offlineBanner.classList.add('online-recovered');
+      if (offlineMessage) {
+        offlineMessage.innerHTML = '<strong>Connection restored!</strong> Syncing with cloud services...';
+      }
+      UI.showNotification('Internet restored! Reconnecting to ScanSheet cloud services.');
+      Utils.announce('Internet connection restored.');
+
+      // Auto-hide the banner after 2.5 seconds
+      setTimeout(() => {
+        offlineBanner.setAttribute('hidden', 'true');
+        offlineBanner.classList.remove('online-recovered');
+      }, 2500);
+
+      // If user was viewing admin dashboard, refresh counts
+      if (isAdminDashboardOpen) {
+        refreshAdminDashboard();
+      }
+    }
+  }
+
+  // Initial check on load
+  if (typeof navigator.onLine === 'boolean' && !navigator.onLine) {
+    updateNetworkStatus(false);
+  }
+
+  window.addEventListener('offline', () => {
+    updateNetworkStatus(false);
+  });
+
+  window.addEventListener('online', () => {
+    updateNetworkStatus(true);
+  });
+
+  if (btnOfflineRetry) {
+    btnOfflineRetry.addEventListener('click', async () => {
+      btnOfflineRetry.textContent = 'Testing...';
+      btnOfflineRetry.setAttribute('disabled', 'true');
+      try {
+        const ping = await fetch('/assets/icons/logo.svg?_t=' + Date.now(), { method: 'HEAD', cache: 'no-store' });
+        if (ping.ok || ping.status === 200 || ping.status === 304) {
+          updateNetworkStatus(true);
+        } else {
+          UI.showNotification('Still offline. Please check your Wi-Fi or data connection.');
+        }
+      } catch (e) {
+        UI.showNotification('Still offline. Please check your Wi-Fi or data connection.');
+      } finally {
+        btnOfflineRetry.removeAttribute('disabled');
+        btnOfflineRetry.textContent = 'Retry';
+      }
+    });
+  }
+
   console.log('ScanSheet initialized (Step 2: Upload Action & Login Gate Ready).');
 });

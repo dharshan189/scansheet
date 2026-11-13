@@ -20,6 +20,8 @@ from flask_cors import CORS
 from ocr_pipeline import process_document_image
 
 mimetypes.add_type('application/vnd.android.package-archive', '.apk')
+mimetypes.add_type('application/javascript', '.js')
+mimetypes.add_type('application/manifest+json', '.webmanifest')
 
 # Path to static frontend files
 FRONTEND_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -354,7 +356,11 @@ def add_header(response):
 @app.route('/<path:path>')
 def serve_frontend(path):
     if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
-        return send_from_directory(app.static_folder, path)
+        resp = send_from_directory(app.static_folder, path)
+        if path == 'sw.js':
+            resp.headers['Service-Worker-Allowed'] = '/'
+            resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        return resp
     return send_from_directory(app.static_folder, 'index.html')
 
 def start_instance(port):
