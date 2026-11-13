@@ -27,11 +27,92 @@
   <!-- EmailJS SDK for Email OTP Verification -->
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 
-  <!-- Instant offline detection: redirect to separate full offline page if disconnected -->
+  <!-- Pre-cache offline page for instant browser-level offline navigation -->
+  <link rel="prefetch" href="offline.html">
+
+  <!-- Active Offline Detection & Redirection System -->
   <script>
-    if (typeof navigator.onLine === 'boolean' && !navigator.onLine) {
-      window.location.replace('/offline.html');
-    }
+    (function () {
+      function goToOfflinePage() {
+        if (!window.location.pathname.endsWith('offline.html')) {
+          window.location.replace('/offline.html');
+        }
+      }
+
+      // 1. Instant check on initial page load
+      if (typeof navigator.onLine === 'boolean' && !navigator.onLine) {
+        goToOfflinePage();
+        return;
+      }
+
+      // 2. Browser offline event listener (immediate OS-level disconnect)
+      window.addEventListener('offline', function () {
+        goToOfflinePage();
+      });
+
+      // 3. Page visibility & focus change detection (e.g. toggling Wi-Fi in OS settings)
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden && !navigator.onLine) {
+          goToOfflinePage();
+        }
+      });
+      window.addEventListener('focus', function () {
+        if (!navigator.onLine) {
+          goToOfflinePage();
+        }
+      });
+
+      // 4. Service Worker offline broadcast listener
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('message', function (event) {
+          if (event.data && event.data.type === 'NETWORK_OFFLINE') {
+            goToOfflinePage();
+          }
+        });
+      }
+
+      // 5. Intercept network fetch failures across the entire application
+      const originalFetch = window.fetch;
+      window.fetch = async function (...args) {
+        try {
+          return await originalFetch.apply(this, args);
+        } catch (fetchErr) {
+          if (!navigator.onLine) {
+            goToOfflinePage();
+          }
+          throw fetchErr;
+        }
+      };
+
+      // 6. Active heartbeat verification (every 2.5 seconds)
+      let isChecking = false;
+      async function heartbeatPing() {
+        if (isChecking) return;
+        if (!navigator.onLine) {
+          goToOfflinePage();
+          return;
+        }
+        isChecking = true;
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(function () { controller.abort(); }, 2000);
+          await originalFetch('/assets/icons/logo.svg?_hb=' + Date.now(), {
+            method: 'HEAD',
+            cache: 'no-store',
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+        } catch (err) {
+          if (!navigator.onLine) {
+            goToOfflinePage();
+          }
+        } finally {
+          isChecking = false;
+        }
+      }
+
+      setInterval(heartbeatPing, 2500);
+    })();
   </script>
 </head>
 

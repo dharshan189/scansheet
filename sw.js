@@ -83,6 +83,15 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Broadcast offline signal to all connected window tabs
+function broadcastOffline() {
+  self.clients.matchAll({ type: 'window' }).then((clients) => {
+    clients.forEach((client) => {
+      client.postMessage({ type: 'NETWORK_OFFLINE' });
+    });
+  }).catch(() => {});
+}
+
 // Fetch Event: Intelligent routing
 self.addEventListener('fetch', (event) => {
   const { request } = event;
@@ -99,6 +108,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Fast-track: Direct cache return for the offline page itself
+  if (url.pathname === '/offline.html') {
+    event.respondWith(
+      caches.match(OFFLINE_URL).then((cached) => cached || fetch(request))
+    );
+    return;
+  }
+
   // 1. NAVIGATION REQUESTS (User entering website or refreshing)
   if (request.mode === 'navigate') {
     event.respondWith(
@@ -112,6 +129,7 @@ self.addEventListener('fetch', (event) => {
           }
           return networkResponse;
         } catch (error) {
+          broadcastOffline();
           // Network failed (device is offline) -> Serve themed offline page
           const cache = await caches.open(CACHE_NAME);
           const cachedOffline = await cache.match(OFFLINE_URL);
@@ -144,6 +162,7 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
       fetch(request).catch(() => {
+        broadcastOffline();
         return new Response(
           JSON.stringify({
             error: 'You are currently offline. Please reconnect to the internet.',

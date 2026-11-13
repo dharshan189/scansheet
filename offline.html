@@ -582,12 +582,26 @@
 
       btnRetry.addEventListener('click', handleRetryClick);
 
-      // Auto-detect when connection returns
+      // Auto-detect when connection returns (event, focus, visibility change, and active poll)
       window.addEventListener('online', function () {
         restoreApp();
       });
 
-      // Periodic gentle network test
+      document.addEventListener('visibilitychange', async function () {
+        if (!document.hidden && navigator.onLine) {
+          const ok = await testNetwork();
+          if (ok) restoreApp();
+        }
+      });
+
+      window.addEventListener('focus', async function () {
+        if (navigator.onLine) {
+          const ok = await testNetwork();
+          if (ok) restoreApp();
+        }
+      });
+
+      // Periodic gentle network test (every 2.5 seconds)
       setInterval(async function () {
         if (navigator.onLine && !isReconnecting) {
           const ok = await testNetwork();
@@ -595,7 +609,7 @@
             restoreApp();
           }
         }
-      }, 3500);
+      }, 2500);
     })();
   </script>
 </body>
