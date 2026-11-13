@@ -26,24 +26,18 @@
 
   <!-- EmailJS SDK for Email OTP Verification -->
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+
+  <!-- Instant offline detection: redirect to separate full offline page if disconnected -->
+  <script>
+    if (typeof navigator.onLine === 'boolean' && !navigator.onLine) {
+      window.location.replace('/offline.html');
+    }
+  </script>
 </head>
 
 <body>
   <!-- Screen reader live region for accessibility announcements -->
   <div id="a11y-live-region" class="sr-only" aria-live="polite" aria-atomic="true"></div>
-
-  <!-- Persistent Offline Status Banner (Visible when offline) -->
-  <aside id="network-offline-banner" class="network-offline-banner" role="status" aria-live="assertive" hidden>
-    <div class="network-offline-container">
-      <span class="offline-pulse-dot" aria-hidden="true"></span>
-      <span class="offline-banner-text" id="network-offline-message">
-        <strong>You are offline.</strong> Showing local workspace. Cloud sync will resume once reconnected.
-      </span>
-      <button type="button" id="btn-offline-retry" class="btn-offline-retry" title="Retry network connection">
-        <span>Retry</span>
-      </button>
-    </div>
-  </aside>
 
   <!-- Header -->
   <header class="app-header" role="banner">
