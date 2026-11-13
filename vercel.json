@@ -5,7 +5,7 @@
   "cleanUrls": true,
   "rewrites": [
     {
-      "source": "/((?!api/|assets/|css/|js/|sw\\.js|offline\\.html|manifest\\.json).*)",
+      "source": "/((?!api/|assets/|css/|js/|sw\\.js|offline|offline\\.html|manifest\\.json).*)",
       "destination": "/index.html"
     }
   ],

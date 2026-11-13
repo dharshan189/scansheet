@@ -11,6 +11,7 @@ const PRECACHE_ASSETS = [
   '/',
   '/index.html',
   '/offline.html',
+  '/offline',
   '/manifest.json',
   '/css/style.css?v=6.6',
   '/css/style.css',
@@ -109,7 +110,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Fast-track: Direct cache return for the offline page itself
-  if (url.pathname === '/offline.html') {
+  if (url.pathname === '/offline' || url.pathname === '/offline.html') {
     event.respondWith(
       caches.match(OFFLINE_URL).then((cached) => cached || fetch(request))
     );

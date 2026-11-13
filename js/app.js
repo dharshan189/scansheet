@@ -1323,20 +1323,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // --------------------------------------------------------------------------
-  // NETWORK CONNECTIVITY: SEPARATE FULL OFFLINE PAGE REDIRECTION
+  // NETWORK CONNECTIVITY: FULL-PAGE OFFLINE VIEW CONTROLLER
   // --------------------------------------------------------------------------
-  function navigateToOfflinePage() {
-    window.location.replace('/offline.html');
+  function activateOfflineMode() {
+    if (window.ScanSheetOffline?.setOfflineMode) {
+      window.ScanSheetOffline.setOfflineMode(true);
+    }
   }
 
-  // If user enters website without internet, navigate to the separate full offline page
+  // If user enters website without internet, activate the full-page offline view
   if (typeof navigator.onLine === 'boolean' && !navigator.onLine) {
-    navigateToOfflinePage();
+    activateOfflineMode();
   }
 
-  // If connection drops during session, navigate to the separate full offline page
+  // If connection drops during session, activate the full-page offline view
   window.addEventListener('offline', () => {
-    navigateToOfflinePage();
+    activateOfflineMode();
   });
 
   console.log('ScanSheet initialized (Step 2: Upload Action & Login Gate Ready).');
