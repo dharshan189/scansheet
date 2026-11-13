@@ -3881,270 +3881,113 @@ button.format-badge-multi:hover {
 }
 
 /* ==========================================================================
-   Full-Page Offline View Overlay (Takes over 100% of viewport without navigation)
+   Project Themed Offline Status Banner & Indicators
    ========================================================================== */
-.offline-fullpage-screen {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 999999;
-  background-color: var(--color-surface-subtle, #f8fafc);
-  color: var(--color-text-main, #0f172a);
-  font-family: var(--font-family-base, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
-  overflow-y: auto;
-  overflow-x: hidden;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
 
-.offline-fullpage-screen .app-header {
-  background-color: var(--color-surface, #ffffff);
-  border-bottom: 1px solid var(--color-surface-border, #e2e8f0);
+.network-offline-banner {
   position: sticky;
   top: 0;
-  z-index: 50;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+  left: 0;
+  width: 100%;
+  z-index: 1000;
+  background: #0f172a;
+  color: #f8fafc;
+  border-bottom: 2px solid #d97706;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.25);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: slideDownBanner 0.3s ease-out;
 }
 
-.offline-fullpage-screen .header-container {
-  width: 100%;
+.network-offline-banner.online-recovered {
+  border-bottom-color: var(--color-primary);
+  background: #064e3b;
+}
+
+.network-offline-container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 12px 24px;
+  padding: 10px 20px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.offline-fullpage-screen .app-main {
-  flex: 1;
-  width: 100%;
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 48px 24px 64px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.offline-fullpage-screen .offline-hero {
-  text-align: center;
-  max-width: 680px;
-  margin: 0 auto 40px auto;
-  width: 100%;
-}
-
-.offline-fullpage-screen .offline-emblem {
-  width: 96px;
-  height: 96px;
-  border-radius: 50%;
-  background: #f1f5f9;
-  border: 2px dashed #cbd5e1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 24px auto;
-  color: #64748b;
-}
-
-.offline-fullpage-screen .offline-emblem svg {
-  width: 48px;
-  height: 48px;
-}
-
-.offline-fullpage-screen .offline-title {
-  font-size: 2.25rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  color: var(--color-text-main, #0f172a);
-  margin-bottom: 12px;
-  line-height: 1.2;
-}
-
-.offline-fullpage-screen .offline-subtitle {
-  font-size: 1.1rem;
-  color: var(--color-text-muted, #64748b);
-  line-height: 1.6;
-  margin-bottom: 28px;
-}
-
-.offline-fullpage-screen .offline-action-bar {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 48px;
-  width: 100%;
-  max-width: 420px;
-}
-
-.offline-fullpage-screen .btn-retry-main {
-  width: 100%;
-  padding: 16px 28px;
-  font-size: 1.05rem;
-  font-weight: 600;
-  color: #ffffff;
-  background-color: var(--color-primary, #059669);
-  border: none;
-  border-radius: 12px;
-  cursor: pointer;
-  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  box-shadow: 0 4px 6px -1px rgba(5, 150, 105, 0.25), 0 2px 4px -2px rgba(5, 150, 105, 0.15);
-  transition: all 0.2s ease;
-  touch-action: manipulation;
-}
-
-.offline-fullpage-screen .btn-retry-main:hover {
-  background-color: var(--color-primary-hover, #047857);
-  box-shadow: 0 8px 16px -2px rgba(5, 150, 105, 0.3);
-}
-
-.offline-fullpage-screen .btn-retry-main.spinning svg {
-  animation: spin 0.8s linear infinite;
-}
-
-.offline-fullpage-screen .connection-status-indicator {
-  font-size: 0.92rem;
-  color: var(--color-text-muted, #64748b);
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: var(--color-surface, #ffffff);
-  border: 1px solid var(--color-surface-border, #e2e8f0);
-  border-radius: 8px;
-  width: 100%;
-  justify-content: center;
-}
-
-.offline-fullpage-screen .connection-status-indicator.online {
-  background: var(--color-primary-light, #ecfdf5);
-  border-color: var(--color-primary-border, #a7f3d0);
-  color: var(--color-primary-active, #065f46);
-  font-weight: 600;
-}
-
-.offline-fullpage-screen .offline-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
-  width: 100%;
-  margin-bottom: 48px;
-}
-
-.offline-fullpage-screen .offline-info-card {
-  background: var(--color-surface, #ffffff);
-  border: 1px solid var(--color-surface-border, #e2e8f0);
-  border-radius: 14px;
-  padding: 24px;
-  text-align: left;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.offline-fullpage-screen .card-icon-badge {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
-  background: var(--color-primary-light, #ecfdf5);
-  color: var(--color-primary, #059669);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.25rem;
-  margin-bottom: 6px;
-}
-
-.offline-fullpage-screen .card-title {
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: var(--color-text-main, #0f172a);
-}
-
-.offline-fullpage-screen .card-desc {
-  font-size: 0.9rem;
-  color: var(--color-text-muted, #64748b);
-  line-height: 1.55;
-}
-
-.offline-fullpage-screen .troubleshoot-strip {
-  width: 100%;
-  background: var(--color-surface, #ffffff);
-  border: 1px solid var(--color-surface-border, #e2e8f0);
-  border-radius: 12px;
-  padding: 20px 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-}
-
-.offline-fullpage-screen .troubleshoot-text {
-  font-size: 0.92rem;
-  color: var(--color-text-muted, #64748b);
-}
-
-.offline-fullpage-screen .troubleshoot-tags {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.offline-fullpage-screen .troubleshoot-tag {
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 6px;
-  background: #f1f5f9;
-  color: #475569;
-}
-
-.offline-fullpage-screen .app-footer {
-  width: 100%;
-  background: var(--color-surface, #ffffff);
-  border-top: 1px solid var(--color-surface-border, #e2e8f0);
-  padding: 24px;
   text-align: center;
-  font-size: 0.85rem;
-  color: var(--color-text-muted, #64748b);
-  margin-top: auto;
+  font-size: 0.88rem;
+  line-height: 1.4;
 }
 
-@media (max-width: 900px) {
-  .offline-fullpage-screen .offline-grid {
-    grid-template-columns: 1fr;
-    gap: 16px;
+.offline-pulse-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #f59e0b;
+  box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7);
+  animation: pulse-amber 1.8s infinite;
+  flex-shrink: 0;
+}
+
+.network-offline-banner.online-recovered .offline-pulse-dot {
+  background-color: #10b981;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  animation: pulse-green 1.8s infinite;
+}
+
+.offline-banner-text {
+  color: #f1f5f9;
+  flex-grow: 0;
+}
+
+.offline-banner-text strong {
+  color: #ffffff;
+}
+
+.btn-offline-retry {
+  background: var(--color-primary);
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 6px;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+  white-space: nowrap;
+}
+
+.btn-offline-retry:hover {
+  background: var(--color-primary-hover);
+}
+
+.btn-offline-retry:active {
+  transform: scale(0.96);
+}
+
+@keyframes slideDownBanner {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
   }
-  .offline-fullpage-screen .troubleshoot-strip {
-    flex-direction: column;
-    align-items: flex-start;
+  to {
+    transform: translateY(0);
+    opacity: 1;
   }
 }
 
 @media (max-width: 600px) {
-  .offline-fullpage-screen .app-main {
-    padding: 32px 16px 48px;
+  .network-offline-container {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    flex-wrap: wrap;
   }
-  .offline-fullpage-screen .offline-title {
-    font-size: 1.75rem;
-  }
-  .offline-fullpage-screen .offline-subtitle {
-    font-size: 0.98rem;
-  }
-  .offline-fullpage-screen .header-container {
-    padding: 10px 16px;
+  .btn-offline-retry {
+    padding: 3px 10px;
+    font-size: 0.75rem;
   }
 }
+
 
 
